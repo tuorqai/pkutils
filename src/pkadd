@@ -1,4 +1,4 @@
 #!/bin/sh
 
-/usr/bin/gawk -f "pkadd.awk" -- $*
+/usr/bin/gawk -f "pkutils/pkadd.awk" -- $*
 exit $?

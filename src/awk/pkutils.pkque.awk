@@ -5,7 +5,7 @@
 BEGIN {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^-(s|-strict)$/) {
-            query["strict"] = 1;
+            strict = 1;
         } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
             match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
             option = m[1];
@@ -30,7 +30,7 @@ BEGIN {
 
     setup_dirs(dirs, root);
 
-    n = do_query(dirs["lib"]"/index.dat", query, results, 1);
+    n = do_query(dirs["lib"]"/index.dat", query, results, 1, strict);
     if (!n) {
         printf "No packages found.\n";
         exit 0;

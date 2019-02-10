@@ -4,9 +4,7 @@
 
 BEGIN {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-(s|-strict)$/) {
-            query["strict"] = 1;
-        } else if (ARGV[i] ~ /^-(u|-upgrade)$/) {
+        if (ARGV[i] ~ /^-(u|-upgrade)$/) {
             upgrade_mode = 1;
         } else if (ARGV[i] ~ /^-(f|-reinstall)$/) {
             force_mode = 1;
@@ -25,6 +23,9 @@ BEGIN {
                 printf "Unrecognized option: %s\n", option;
                 exit 1;
             }
+        } else if (ARGV[i] ~ /^-/) {
+            printf "Unrecognized argument: %s\n", ARGV[i];
+            exit 1;
         } else {
             query["name"] = query["name"] "|" ARGV[i];
         }
@@ -37,7 +38,7 @@ BEGIN {
     #
     # Step 1: look for packages
 
-    n = do_query(dirs["lib"]"/index.dat", query, results, 0);
+    n = do_query(dirs["lib"]"/index.dat", query, results, 0, 1);
     if (!n) {
         printf "No packages found.\n";
     }

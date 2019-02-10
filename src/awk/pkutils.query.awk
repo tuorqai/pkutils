@@ -1,6 +1,8 @@
 
-function do_query(index_dat, query, results, search_mode,    n, got, stash) {
+function do_query(index_dat, query, results, search_mode, strict,    j, n, got, stash) {
     FS = ":"; RS = "\n";
+
+    if (strict) for (j in query) query[j] = "^" query[j] "$";
 
     while ((getline < index_dat) > 0) {
         got["repo_id"]  = $2;

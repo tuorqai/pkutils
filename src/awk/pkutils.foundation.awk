@@ -1,4 +1,3 @@
-#!/usr/bin/gawk -f
 
 function setup_dirs(dirs, root) {
     dirs["root"] = root

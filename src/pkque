@@ -1,4 +1,4 @@
 #!/bin/sh
 
-/usr/bin/gawk -f "pkutils/pkque.awk" -- $*
+/usr/bin/gawk -f "pkutils.pkque.awk" -- $*
 exit $?

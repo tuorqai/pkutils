@@ -1,6 +1,6 @@
 
-@include "foundation.awk"
-@include "query.awk"
+@include "pkutils.foundation.awk"
+@include "pkutils.query.awk"
 
 BEGIN {
     for (i = 1; i < ARGC; i++) {

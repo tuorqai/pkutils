@@ -1,5 +1,5 @@
 
-@include "foundation.awk"
+@include "pkutils.foundation.awk"
 
 function read_checksums(repo,    m, file) {
     RS = "\n"; FS = " ";

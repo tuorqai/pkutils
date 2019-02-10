@@ -1,0 +1,4 @@
+#!/bin/sh
+
+/usr/bin/gawk -f "pkupd.awk" -- $*
+exit $?

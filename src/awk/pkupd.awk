@@ -1,4 +1,3 @@
-#!/usr/bin/gawk -f
 
 @include "foundation.awk"
 
@@ -154,6 +153,7 @@ BEGIN {
 
     setup_dirs(dirs, root);
     parse_repos_list(dirs["etc"]"/repos.list", repos);
+    print isarray(repos);
     status = pkupd(dirs, repos);
 
     if (!status) {

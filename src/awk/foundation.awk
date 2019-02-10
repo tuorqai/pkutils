@@ -24,32 +24,37 @@ function make_current_state(dirs, installed,    cmd, line, m) {
     close(cmd)
 }
 
-function parse_repos_list(repos_list_file, repos,    m, name) {
+function parse_repos_list(repos_list_file, repos,    n, m, name) {
+    FS = " "; RS = "\n";
+
     while ((getline < repos_list_file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
-            name = $2
-            repos[name]["name"] = name
-            repos[name]["type"] = $1
+            name = $2;
+            repos[name]["name"] = name;
+            repos[name]["type"] = $1;
 
-            match($3, /(https?|ftp|rsync|file):\/\/([^\/]*)\/(.*)/, m)
-            repos[name]["url_scheme"] = m[1]
-            repos[name]["url_host"] = m[2]
-            repos[name]["url_path"] = m[3]
+            match($3, /(https?|ftp|rsync|file):\/\/([^\/]*)\/(.*)/, m);
+            repos[name]["url_scheme"] = m[1];
+            repos[name]["url_host"] = m[2];
+            repos[name]["url_path"] = m[3];
 
-            repos[name]["dir"] = dirs["lib"]"/repo_"name
-            repos[name]["cache"] = dirs["cache"]"/"name
+            repos[name]["dir"] = dirs["lib"]"/repo_"name;
+            repos[name]["cache"] = dirs["cache"]"/"name;
 
-            system("mkdir -p "repos[name]["dir"])
-            system("mkdir -p "repos[name]["cache"])
+            system("mkdir -p "repos[name]["dir"]);
+            system("mkdir -p "repos[name]["cache"]);
+
+            n++;
         }
     }
 
-    close(repos_list_file)
+    close(repos_list_file);
+    return n;
 }
 
 function check_md5sum(file, md5sum) {
     if (!file || !md5sum) {
-        return 1;
+        return 0;
     }
 
     cmd = sprintf("echo %s %s | /usr/bin/md5sum --check >/dev/null 2>&1", md5sum, file);
@@ -64,7 +69,7 @@ function check_md5sum(file, md5sum) {
 # Return 1 on failure, 0 on success
 #
 function fetch_file(scheme, host, path, output, md5sum,    cmd) {
-    if (check_md5sum(output, md5sum)) {
+    if (md5sum > 0 && check_md5sum(output, md5sum)) {
         printf "File %s is downloaded already.\n", output;
         return 0;
     }
@@ -92,14 +97,12 @@ function fetch_file(scheme, host, path, output, md5sum,    cmd) {
         return 1
     }
 
-    if (check_md5sum(output, md5sum)) {
+    if (md5sum == 0 || check_md5sum(output, md5sum)) {
         return 0;
     }
 
-    printf "Error: wrong MD5 checksum." >> "/dev/stderr";
+    printf "Error: wrong MD5 checksum.\n" >> "/dev/stderr";
     return 1;
 }
 
-function query() {
-    
-}
+function copy_array(dest, src,    j) { for (j in src) dest[j] = src[j]; }

@@ -33,7 +33,10 @@ BEGIN {
 
     for (j in query) sub(/^\|/, "", query[j]);
 
-    setup_dirs(dirs, root);
+    if (!setup_dirs(dirs, root, 0)) {
+        printf "Failed to set up directories.\n" > "/dev/stderr";
+        exit 1;
+    }
 
     #
     # Step 1: look for packages

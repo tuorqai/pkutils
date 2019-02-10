@@ -84,7 +84,7 @@ function make_index(repo, output,    package, m) {
 function update_and_index_repo(name, repo, index_dat,    index_txt, status) {
     # quite dirty, but gotta somehow handle official repo's layout
     if (name ~ /slackware|slackware64|extra|pasture|patches|testing/) {
-        repo["url_path"] = repo["url_path"] "/" name;
+        repo["url_path"] = sprintf("%s/%s", repo["url_path"], name);
     }
 
     printf "[%s] Updating and indexing %s://%s...\n", repo["type"], repo["url_scheme"], repo["url_path"];
@@ -99,19 +99,21 @@ function update_and_index_repo(name, repo, index_dat,    index_txt, status) {
     }
 
     status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         repo["url_path"]"/CHECKSUMS.md5",
-                         repo["dir"]"/CHECKSUMS.md5", 0);
-    status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         repo["url_path"]"/CHECKSUMS.md5.asc",
-                         repo["dir"]"/CHECKSUMS.md5.asc", 0);
+                         sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
+                         sprintf("%s/CHECKSUMS.md5", repo["dir"]));
     
     repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
     read_checksums(repo);
 
     status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         repo["url_path"]"/"index_txt,
-                         repo["dir"]"/"index_txt, repo["checksums"][index_txt]);
-    repo["txt"] = repo["dir"]"/"index_txt;
+                         sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
+                         sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
+                         repo["checksums"]["CHECKSUMS.md5.asc"]);
+    status += fetch_file(repo["url_scheme"], repo["url_host"],
+                         sprintf("%s/%s", repo["url_path"], index_txt),
+                         sprintf("%s/%s", repo["dir"], index_txt),
+                         repo["checksums"][index_txt]);
+    repo["txt"] = sprintf("%s/%s", repo["dir"], index_txt);
 
     if (status > 0) {
         printf "-- Failed to retrieve %d files.\n", status > "/dev/stderr";
@@ -119,13 +121,14 @@ function update_and_index_repo(name, repo, index_dat,    index_txt, status) {
     }
 
     make_index(repo, index_dat);
+    printf "\n";
     return 1;
 }
 
 function pkupd(dirs, repos,    name, index_dat) {
-    index_dat = dirs["lib"] "/index.dat";
+    index_dat = sprintf("%s/index.dat", dirs["lib"]);
 
-    # is there a better way to wipe out file?
+    # is there a better way to wipe out a file?
     printf "" > index_dat;
 
     for (name in repos) {
@@ -134,30 +137,30 @@ function pkupd(dirs, repos,    name, index_dat) {
             return 0;
         }
     }
-
     fflush(index_dat);
-
     return 1;
 }
 
 BEGIN {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^--root=.+/) {
-            match(ARGV[i], /^(--root=)(.*)/, m)
-            root = m[2]
+            match(ARGV[i], /^(--root=)(.*)/, m);
+            root = m[2];
         } else {
             printf "Unrecognized argument: %s!\n", ARGV[i];
             exit 1;
         }
     }
 
-    setup_dirs(dirs, root);
-    parse_repos_list(dirs["etc"]"/repos.list", repos);
-    print isarray(repos);
-    status = pkupd(dirs, repos);
+    if (!setup_dirs(dirs, root, 0)) {
+        printf "Failed to set up directories.\n" >> "/dev/stderr";
+        exit 1;
+    }
 
+    parse_repos_list(sprintf("%s/repos.list", dirs["etc"]), repos);
+    status = pkupd(dirs, repos);
     if (!status) {
-        print "Failed to synchronize repositories!" > "/dev/stderr"
-        exit 1
+        printf "Failed to synchronize repositories!" > "/dev/stderr";
+        exit 1;
     }
 }

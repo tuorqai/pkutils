@@ -28,7 +28,7 @@ BEGIN {
 
     for (j in query) sub(/^\|/, "", query[j]);
 
-    setup_dirs(dirs, root);
+    setup_dirs(dirs, root, 1);
 
     n = do_query(dirs["lib"]"/index.dat", query, results, 1, strict);
     if (!n) {

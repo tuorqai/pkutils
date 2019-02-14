@@ -284,7 +284,7 @@ BEGIN {
             break;
         }
 
-        printf "Failed to download %d packages.\n", status > "/dev/stderr";
+        printf "Failed to download %d packages.\n", errors > "/dev/stderr";
         if (answer("Retry?", "n") == 1) {
             errors = 0;
             continue;

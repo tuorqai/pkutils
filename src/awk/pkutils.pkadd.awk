@@ -197,7 +197,7 @@ BEGIN {
                     printf "Package %s (%s) installed already.\n", name, results[i]["version"];
                 }
             } else {
-                # Is this package is in lock list?
+                # Is this package in lock list?
                 for (j in lock_list) {
                     if (installed[name]["name"]     ~ lock_list[j]["name"]       &&
                         installed[name]["version"]  ~ lock_list[j]["version"]    &&

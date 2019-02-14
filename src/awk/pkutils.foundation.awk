@@ -28,32 +28,46 @@ function make_current_state(dirs, installed,    cmd, name, m) {
     close(cmd);
 }
 
-function parse_repos_list(repos_list_file, repos,    total_repos, m, name) {
+function parse_repos_list(repos_list_file, repos,    idx, m, name) {
     FS = " "; RS = "\n";
+
+    idx = 1;
 
     while ((getline < repos_list_file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
-            name = $2;
-            repos[name]["name"] = name;
-            repos[name]["type"] = $1;
+            repos[idx]["name"] = $2;
+            repos[idx]["type"] = $1;
 
             match($3, /(https?|ftp|rsync|file):\/\/([^\/]*)\/(.*)/, m);
-            repos[name]["url_scheme"] = m[1];
-            repos[name]["url_host"] = m[2];
-            repos[name]["url_path"] = m[3];
+            repos[idx]["url_scheme"] = m[1];
+            repos[idx]["url_host"] = m[2];
+            repos[idx]["url_path"] = m[3];
 
-            repos[name]["dir"] = dirs["lib"]"/repo_"name;
-            repos[name]["cache"] = dirs["cache"]"/"name;
+            repos[idx]["dir"] = sprintf("%s/repo_%s", dirs["lib"], repos[idx]["name"]);
+            repos[idx]["cache"] = sprintf("%s/%s", dirs["cache"], repos[idx]["name"]);
 
-            system("mkdir -p "repos[name]["dir"]);
-            system("mkdir -p "repos[name]["cache"]);
+            system(sprintf("mkdir -p %s", repos[idx]["dir"]));
+            system(sprintf("mkdir -p %s", repos[idx]["cache"]));
 
-            total_repos++;
+            idx++;
         }
     }
 
     close(repos_list_file);
-    return total_repos;
+}
+
+function parse_lock_list(holdlist_file, holdlist,    i) {
+    FS = " "; RS = "\n";
+
+    while ((getline < holdlist_file) > 0) {
+        i++;
+        holdlist[i]["name"]      = "^" $1 "$";
+        holdlist[i]["version"]   = "^" $2 "$";
+        holdlist[i]["arch"]      = "^" $3 "$";
+        holdlist[i]["build"]     = "^" $4 "$";
+        holdlist[i]["tag"]       = "^" $5 "$";
+    }
+    close(holdlist_file);
 }
 
 function check_md5sum(file, md5sum) {

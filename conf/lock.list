@@ -1,0 +1,19 @@
+
+# This file should contain list of regular expressions in
+# the following format:
+#
+# <name> <version> <arch> <build> <tag>
+#
+# Examples:
+#
+# 1. Lock all packages from AlienBOB:
+# .* .* .* [0-9] alien
+#
+# 2. Lock all kernel packages:
+# kernel-.* .* .* [0-9] .*
+#
+# 3. Lock all packages of version 4.14.3:
+# .* 4\.14\.3 .* .* [0-9] .*
+#
+# Locked packages will NOT be upgraded.
+#

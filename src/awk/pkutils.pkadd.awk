@@ -2,50 +2,51 @@
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 
-function prompt_packages(action, list,    p) {
-    if (length(list) <= 1)
-        return 0;
+function prompt_packages2(list,    p) {
+    if (list["count"] == 0)
+        return;
 
-    printf "%d package(s) will be %s:\n", (length(list) - 1), action;
-    for (p in list) {
-        if (p == 0) continue;
-        printf "-- %s\n", p;
+    printf "%d package(s) will be %s:\n", list["count"], toupper(list["action"]);
+    for (p = 1; p <= list["count"]; p++) {
+        printf "-- %s (%s)\n", list["packages"][p]["name"], list["packages"][p]["hint"];
     }
-
-    return (length(list) - 1);
 }
 
-function process_packages(cmd, list, options,    p) {
-    if (length(list) <= 1)
+function process_packages2(list, options,    p) {
+    if (list["count"] == 0)
         return;
 
     if (options["root"])
-        cmd = sprintf("%s --root %s", cmd, options["root"]);
+        list["command"] = sprintf("%s --root %s", list["command"], options["root"]);
 
-    for (p in list) {
-        if (p == 0) continue;
+    for (p = 1; p <= list["count"]; p++) {
         if (options["dryrun"] == 1) {
-            printf ">> %s %s\n", cmd, list[p];
+            printf ">> %s %s\n", list["command"], list["packages"][p]["file"];
             continue;
         }
 
-        system(sprintf("%s %s", cmd, list[p]));
+        system(sprintf("%s %s", list["command"], list["packages"][p]["file"]));
     }
 }
 
 function answer(prompt, def,    reply) {
     if (def == "y")
-        printf "%s (Y/n) ", prompt;
+        printf "%s [Y/n] ", prompt;
     else
-        printf "%s (y/N) ", prompt;
+        printf "%s [y/N] ", prompt;
 
     getline reply < "/dev/stdin";
     reply = tolower(reply);
 
-    if (reply != def)
-        return 0;
+    if (def == "y") {
+        if (reply == "n")
+            return 0;
+        return 1;
+    }
 
-    return 1;
+    if (reply == "y")
+        return 1;
+    return 0;
 }
 
 function get_repo_idx(name, repos,    r) {
@@ -57,6 +58,18 @@ function get_repo_idx(name, repos,    r) {
 
     printf "Error: no repo %s\n", name > "/dev/stderr";
     return 0;
+}
+
+function fetch_all_packages(list,    errors, p) {
+    for (p = 1; p <= list["count"]; p++) {
+        errors += fetch_file(list["packages"][p]["url_scheme"],
+                             list["packages"][p]["url_host"],
+                             list["packages"][p]["url_path"],
+                             list["packages"][p]["file"],
+                             list["packages"][p]["checksum"]);
+    }
+
+    return errors;
 }
 
 BEGIN {
@@ -126,10 +139,20 @@ BEGIN {
     #
     # Step 2: detect which packages should be upgraded or installed
 
-    # dirty way to explicitly initialize arrays
-    reinstall_list[0] = 0;
-    install_list[0] = 0;
-    upgrade_list[0] = 0;
+    reinstall_list["action"] = "reinstalled";
+    reinstall_list["command"] = "upgradepkg --reinstall";
+    reinstall_list["count"] = 0;
+    reinstall_list["packages"][0] = 0;
+
+    install_list["action"] = "installed";
+    install_list["command"] = "installpkg";
+    install_list["count"] = 0;
+    install_list["packages"][0] = 0;
+
+    upgrade_list["action"] = "upgraded";
+    upgrade_list["command"] = "upgradepkg";
+    upgrade_list["count"] = 0;
+    upgrade_list["packages"][0] = 0;
 
     for (i = 1; i <= n; i++) {
         r = get_repo_idx(results[i]["repo_id"], repos);
@@ -156,7 +179,17 @@ BEGIN {
         if (name in installed) {
             if (results[i]["version"] == installed[name]["version"]) {
                 if (options["force"]) {
-                    reinstall_list[name] = results[i]["output"];
+                    k = ++reinstall_list["count"];
+                    reinstall_list["packages"][k]["name"]       = name;
+                    reinstall_list["packages"][k]["file"]       = results[i]["output"];
+                    reinstall_list["packages"][k]["hint"]       = sprintf("%s-%s-%s%s",
+                                                                    results[i]["version"],
+                                                                    results[i]["arch"],
+                                                                    results[i]["build"],
+                                                                    results[i]["tag"]);
+                    reinstall_list["packages"][k]["url_scheme"] = repos[r]["url_scheme"];
+                    reinstall_list["packages"][k]["url_host"]   = repos[r]["url_host"];
+                    reinstall_list["packages"][k]["url_path"]   = results[i]["remote"];
                 } else if (!(options["upgrade"] && !query["name"])) {
                     # do not show these messages if in upgrade mode and
                     # package name isn't set explicitly
@@ -176,14 +209,41 @@ BEGIN {
                         break;
                     }
                 }
-                if (locked)
-                    continue;
 
-                upgrade_list[name] = results[i]["output"];
+                if (locked) {
+                    locked = 0;
+                    continue;
+                }
+
+                k = ++upgrade_list["count"];
+                upgrade_list["packages"][k]["name"]         = name;
+                upgrade_list["packages"][k]["file"]         = results[i]["output"];
+                upgrade_list["packages"][k]["hint"]         = sprintf("%s-%s-%s%s -> %s-%s-%s%s",
+                                                                installed[name]["version"],
+                                                                installed[name]["arch"],
+                                                                installed[name]["build"],
+                                                                installed[name]["tag"],
+                                                                results[i]["version"],
+                                                                results[i]["arch"],
+                                                                results[i]["build"],
+                                                                results[i]["tag"]);
+                upgrade_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
+                upgrade_list["packages"][k]["url_host"]     = repos[r]["url_host"];
+                upgrade_list["packages"][k]["url_path"]     = results[i]["remote"];
             }
         } else {
             if (!options["upgrade"]) {
-                install_list[name] = results[i]["output"];
+                k = ++install_list["count"];
+                install_list["packages"][k]["name"]         = name;
+                install_list["packages"][k]["file"]         = results[i]["output"];
+                install_list["packages"][k]["hint"]         = sprintf("%s-%s-%s%s",
+                                                                results[i]["version"],
+                                                                results[i]["arch"],
+                                                                results[i]["build"],
+                                                                results[i]["tag"]);
+                install_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
+                install_list["packages"][k]["url_host"]     = repos[r]["url_host"];
+                install_list["packages"][k]["url_path"]     = results[i]["remote"];
             }
         }
     }
@@ -191,16 +251,19 @@ BEGIN {
     #
     # Step 3: Prompt user
 
-    sum += prompt_packages("REINSTALLED", reinstall_list);
-    sum += prompt_packages("INSTALLED", install_list);
-    sum += prompt_packages("UPGRADED", upgrade_list);
-
-    if (sum == 0) {
+    if (reinstall_list["count"] == 0 &&
+        install_list["count"]   == 0 &&
+        upgrade_list["count"]   == 0)
+    {
         printf "Nothing to do.\n";
         exit 0;
     }
 
-    if (answer("Continue?", "y")) {
+    prompt_packages2(reinstall_list);
+    prompt_packages2(install_list);
+    prompt_packages2(upgrade_list);
+
+    if (answer("Continue?", "y") == 0) {
         printf "OK...\n";
         exit 0;
     }
@@ -209,27 +272,18 @@ BEGIN {
     # Step 4: download packages to cache
 
     while (1) {
-        for (p = 1; p <= n; p++) {
-            if (!(results[p]["name"] in reinstall_list ||
-                  results[p]["name"] in install_list ||
-                  results[p]["name"] in upgrade_list))
-            {
-                continue;
-            }
-            r = get_repo_idx(results[p]["repo_id"], repos);
-            if (!r) exit 1;
-            status += fetch_file(repos[r]["url_scheme"], repos[r]["url_host"],
-                results[p]["remote"], results[p]["output"], results[p]["checksum"]);
-        }
+        errors += fetch_all_packages(reinstall_list);
+        errors += fetch_all_packages(install_list);
+        errors += fetch_all_packages(upgrade_list);
 
-        if (!status) {
+        if (!errors) {
             printf "All packages downloaded successfully.\n";
             break;
         }
 
         printf "Failed to download %d packages.\n", status > "/dev/stderr";
-        if (answer("Retry?", "n")) {
-            status = 0;
+        if (answer("Retry?", "n") == 1) {
+            errors = 0;
             continue;
         }
 
@@ -239,9 +293,9 @@ BEGIN {
     #
     # Step N: actually reinstall/install/upgrade packages
 
-    process_packages("upgradepkg --reinstall", reinstall_list);
-    process_packages("installpkg", install_list);
-    process_packages("upgradepkg", upgrade_list);
+    process_packages2(reinstall_list);
+    process_packages2(install_list);
+    process_packages2(upgrade_list);
 
     printf "Done.\n";
 }

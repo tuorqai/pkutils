@@ -293,9 +293,9 @@ BEGIN {
     #
     # Step N: actually reinstall/install/upgrade packages
 
-    process_packages2(reinstall_list);
-    process_packages2(install_list);
-    process_packages2(upgrade_list);
+    process_packages2(reinstall_list, options);
+    process_packages2(install_list, options);
+    process_packages2(upgrade_list, options);
 
     printf "Done.\n";
 }

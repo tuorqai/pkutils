@@ -1,0 +1,6 @@
+       |-----handy-ruler------------------------------------------------------|
+pkutils: pkutils (minimalistic package manager for Slackware)
+pkutils:
+pkutils: pkutils is a pkgtools wrapper written in AWK. It was intended to
+pkutils: become a faster alternative for slackpkg+.
+pkutils:

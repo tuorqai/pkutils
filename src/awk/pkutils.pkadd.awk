@@ -190,6 +190,7 @@ BEGIN {
                     reinstall_list["packages"][k]["url_scheme"] = repos[r]["url_scheme"];
                     reinstall_list["packages"][k]["url_host"]   = repos[r]["url_host"];
                     reinstall_list["packages"][k]["url_path"]   = results[i]["remote"];
+                    reinstall_list["packages"][k]["checksum"]   = results[i]["checksum"];
                 } else if (!(options["upgrade"] && !query["name"])) {
                     # do not show these messages if in upgrade mode and
                     # package name isn't set explicitly
@@ -230,6 +231,7 @@ BEGIN {
                 upgrade_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
                 upgrade_list["packages"][k]["url_host"]     = repos[r]["url_host"];
                 upgrade_list["packages"][k]["url_path"]     = results[i]["remote"];
+                upgrade_list["packages"][k]["checksum"]     = results[i]["checksum"];
             }
         } else {
             if (!options["upgrade"]) {
@@ -244,6 +246,7 @@ BEGIN {
                 install_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
                 install_list["packages"][k]["url_host"]     = repos[r]["url_host"];
                 install_list["packages"][k]["url_path"]     = results[i]["remote"];
+                install_list["packages"][k]["checksum"]     = results[i]["checksum"];
             }
         }
     }

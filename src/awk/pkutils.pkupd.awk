@@ -81,10 +81,10 @@ function make_index(repo, output,    package, m) {
     delete repo["txt"];
 }
 
-function update_and_index_repo(name, repo, index_dat,    index_txt, status) {
+function update_and_index_repo(repo, index_dat,    index_txt, status) {
     # quite dirty, but gotta somehow handle official repo's layout
-    if (name ~ /slackware|slackware64|extra|pasture|patches|testing/) {
-        repo["url_path"] = sprintf("%s/%s", repo["url_path"], name);
+    if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
+        repo["url_path"] = sprintf("%s/%s", repo["url_path"], repo["name"]);
     }
 
     printf "[%s] Updating and indexing %s://%s...\n", repo["type"], repo["url_scheme"], repo["url_path"];
@@ -125,15 +125,17 @@ function update_and_index_repo(name, repo, index_dat,    index_txt, status) {
     return 1;
 }
 
-function pkupd(dirs, repos,    name, index_dat) {
+function pkupd(dirs, repos,    r, total_repos, index_dat) {
     index_dat = sprintf("%s/index.dat", dirs["lib"]);
 
     # is there a better way to wipe out a file?
     printf "" > index_dat;
 
-    for (name in repos) {
-        if (!update_and_index_repo(name, repos[name], index_dat)) {
-            printf "Error: failed to synchronize \"%s\" repo!\n", name > "/dev/stderr";
+    total_repos = length(repos);
+
+    for (r = total_repos; r >= 1; r--) {
+        if (!update_and_index_repo(repos[r], index_dat)) {
+            printf "Error: failed to synchronize \"%s\" repo!\n", repos[r]["name"] > "/dev/stderr";
             return 0;
         }
     }
@@ -160,7 +162,7 @@ BEGIN {
     parse_repos_list(sprintf("%s/repos.list", dirs["etc"]), repos);
     status = pkupd(dirs, repos);
     if (!status) {
-        printf "Failed to synchronize repositories!" > "/dev/stderr";
+        printf "Failed to synchronize repositories!\n" > "/dev/stderr";
         exit 1;
     }
 }

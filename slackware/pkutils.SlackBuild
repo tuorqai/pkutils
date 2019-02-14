@@ -32,7 +32,13 @@ cp src/pk??? $PKG/usr/sbin
 mkdir -p $PKG/usr/share/awk
 cp src/awk/pkutils.*.awk $PKG/usr/share/awk
 
+mkdir -p $PKG/etc/pkutils
+for i in conf/*; do
+  cp $i $PKG/etc/pkutils/$(basename $i).new
+done
+
 mkdir -p $PKG/install
+cat $CWD/doinst.sh > $PKG/install/doinst.sh
 cat $CWD/slack-desc > $PKG/install/slack-desc
 
 cd $PKG

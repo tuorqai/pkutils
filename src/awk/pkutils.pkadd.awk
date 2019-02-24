@@ -72,44 +72,79 @@ function fetch_all_packages(list,    errors, p) {
     return errors;
 }
 
+function compare_packages(a, b) {
+    if (a["name"]    == b["name"]    &&
+        a["version"] == b["version"] &&
+        a["arch"]    == b["arch"]    &&
+        a["build"]   == b["build"]   &&
+        a["tag"]     == b["tag"])
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+function is_package_locked(pk, locked,    x) {
+    for (x in locked) {
+        if (compare_packages(pk, locked[x])) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+function add_package_to_list(list, oldpk, newpk, repo, u,    x) {
+    x = ++list["count"];
+    list["packages"][x]["name"]       = newpk["name"];
+    list["packages"][x]["file"]       = newpk["output"];
+    
+    list["packages"][x]["url_scheme"] = repo["url_scheme"];
+    list["packages"][x]["url_host"]   = repo["url_host"];
+    list["packages"][x]["url_path"]   = newpk["remote"];
+    list["packages"][x]["checksum"]   = newpk["checksum"];
+
+    if (oldpk) {
+        list["packages"][x]["hint"] = sprintf("%s-%s-%s%s -> %s-%s-%s%s",
+                                              oldpk["version"],
+                                              oldpk["arch"],
+                                              oldpk["build"],
+                                              oldpk["tag"]);
+    } else {
+        list["packages"][x]["hint"] = sprintf("%s-%s-%s%s",
+                                              newpk["version"],
+                                              newpk["arch"],
+                                              newpk["build"],
+                                              newpk["tag"]);
+    }
+}
+
 BEGIN {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-(u|-upgrade)$/)
-        {
-            options["upgrade"] = 1;
-        }
-        else if (ARGV[i] ~ /^-(f|-reinstall)$/)
-        {
-            options["force"] = 1;
-        }
-        else if (ARGV[i] ~ /^-(d|-dry-run)$/)
-        {
-            options["dryrun"] = 1;
-        }
-        else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/)
-        {
+        if (ARGV[i] ~ /^-[^=]+$/) {
+                 if (ARGV[i] ~ /^(-u|--upgrade)$/)      options["upgrade"] = 1;
+            else if (ARGV[i] ~ /^(-f|--reinstall)$/)    options["force"] = 1;
+            else if (ARGV[i] ~ /^(-d|--dry-run)$/)      options["dryrun"] = 1;
+            else {
+                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
+                exit 1;
+            }
+        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
             match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
             option = m[1];
-            value = m[2];
+            value  = m[2];
 
-            if (option ~ /^-R$|^--root$/)           options["root"]     = value;
+                 if (option ~ /^-R$|^--root$/)      options["root"]     = value;
             else if (option ~ /^-r$|^--repo$/)      query["repo_id"]    = query["repo_id"] "|" value;
             else if (option ~ /^-e$|^--series$/)    query["series"]     = query["series"]  "|" value;
             else if (option ~ /^-v$|^--version$/)   query["version"]    = query["version"] "|" value;
             else if (option ~ /^-a$|^--arch$/)      query["arch"]       = query["arch"]    "|" value;
             else if (option ~ /^-t$|^--tag$/)       query["tag"]        = query["tag"]     "|" value;
             else {
-                printf "Unrecognized option: %s\n", option;
+                printf "Unrecognized option: %s\n", option >> "/dev/stderr";
                 exit 1;
             }
-        }
-        else if (ARGV[i] ~ /^-/)
-        {
-            printf "Unrecognized argument: %s\n", ARGV[i];
-            exit 1;
-        }
-        else
-        {
+        } else {
             query["name"] = query["name"] "|" ARGV[i];
         }
     }
@@ -154,102 +189,60 @@ BEGIN {
     upgrade_list["count"] = 0;
     upgrade_list["packages"][0] = 0;
 
-    for (i = 1; i <= n; i++) {
-        r = get_repo_idx(results[i]["repo_id"], repos);
+    for (p = 1; p <= n; p++) {
+        r = get_repo_idx(results[p]["repo_id"], repos);
         if (!r) exit 1;
 
-        results[i]["fullname"] = sprintf("%s-%s-%s-%s%s.%s",
-                                         results[i]["name"],
-                                         results[i]["version"],
-                                         results[i]["arch"],
-                                         results[i]["build"],
-                                         results[i]["tag"],
-                                         results[i]["type"]);
-        results[i]["remote"]   = sprintf("%s/%s/%s",
+        results[p]["fullname"] = sprintf("%s-%s-%s-%s%s.%s",
+                                         results[p]["name"],
+                                         results[p]["version"],
+                                         results[p]["arch"],
+                                         results[p]["build"],
+                                         results[p]["tag"],
+                                         results[p]["type"]);
+        results[p]["remote"]   = sprintf("%s/%s/%s",
                                          repos[r]["url_path"],
-                                         results[i]["location"],
-                                         results[i]["fullname"]);
-        results[i]["output"]   = sprintf("%s/%s/%s",
+                                         results[p]["location"],
+                                         results[p]["fullname"]);
+        results[p]["output"]   = sprintf("%s/%s/%s",
                                          dirs["cache"],
                                          repos[r]["name"],
-                                         results[i]["fullname"]);
+                                         results[p]["fullname"]);
 
-        name = results[i]["name"];
+        name = results[p]["name"];
 
         if (name in installed) {
-            if (results[i]["version"] == installed[name]["version"]) {
+            if (results[p]["version"] == installed[name]["version"]) {
+                #
+                # Case A: same package of exact same version is installed
                 if (options["force"]) {
-                    k = ++reinstall_list["count"];
-                    reinstall_list["packages"][k]["name"]       = name;
-                    reinstall_list["packages"][k]["file"]       = results[i]["output"];
-                    reinstall_list["packages"][k]["hint"]       = sprintf("%s-%s-%s%s",
-                                                                    results[i]["version"],
-                                                                    results[i]["arch"],
-                                                                    results[i]["build"],
-                                                                    results[i]["tag"]);
-                    reinstall_list["packages"][k]["url_scheme"] = repos[r]["url_scheme"];
-                    reinstall_list["packages"][k]["url_host"]   = repos[r]["url_host"];
-                    reinstall_list["packages"][k]["url_path"]   = results[i]["remote"];
-                    reinstall_list["packages"][k]["checksum"]   = results[i]["checksum"];
-                } else if (!(options["upgrade"] && !query["name"])) {
-                    # do not show these messages if in upgrade mode and
-                    # package name isn't set explicitly
-                    printf "Package %s (%s) installed already.\n", name, results[i]["version"];
-                }
-            } else {
-                # Is this package in lock list?
-                for (j in lock_list) {
-                    if (installed[name]["name"]     ~ lock_list[j]["name"]       &&
-                        installed[name]["version"]  ~ lock_list[j]["version"]    &&
-                        installed[name]["arch"]     ~ lock_list[j]["arch"]       &&
-                        installed[name]["build"]    ~ lock_list[j]["build"]      &&
-                        installed[name]["tag"]      ~ lock_list[j]["tag"])
-                    {
-                        printf "Package %s is locked.\n", name;
-                        locked = 1;
-                        break;
-                    }
-                }
-
-                if (locked) {
-                    locked = 0;
+                    add_package_to_list(reinstall_list, 0, results[p], repos[r]);
                     continue;
                 }
 
-                k = ++upgrade_list["count"];
-                upgrade_list["packages"][k]["name"]         = name;
-                upgrade_list["packages"][k]["file"]         = results[i]["output"];
-                upgrade_list["packages"][k]["hint"]         = sprintf("%s-%s-%s%s -> %s-%s-%s%s",
-                                                                installed[name]["version"],
-                                                                installed[name]["arch"],
-                                                                installed[name]["build"],
-                                                                installed[name]["tag"],
-                                                                results[i]["version"],
-                                                                results[i]["arch"],
-                                                                results[i]["build"],
-                                                                results[i]["tag"]);
-                upgrade_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
-                upgrade_list["packages"][k]["url_host"]     = repos[r]["url_host"];
-                upgrade_list["packages"][k]["url_path"]     = results[i]["remote"];
-                upgrade_list["packages"][k]["checksum"]     = results[i]["checksum"];
+                if (query["name"])
+                    printf "Package %s (%s) installed already.\n", name, results[p]["version"];
+            } else {
+                #
+                # Case B: same package is installed but version is different
+                if (is_package_locked(installed[name], lock_list)) {
+                    printf "Package %s (%s) is locked.\n", name, results[p]["version"];
+                    continue;
+                }
+
+                add_package_to_list(upgrade_list, installed[name], results[p], repos[r]);
             }
         } else {
-            if (!options["upgrade"]) {
-                k = ++install_list["count"];
-                install_list["packages"][k]["name"]         = name;
-                install_list["packages"][k]["file"]         = results[i]["output"];
-                install_list["packages"][k]["hint"]         = sprintf("%s-%s-%s%s",
-                                                                results[i]["version"],
-                                                                results[i]["arch"],
-                                                                results[i]["build"],
-                                                                results[i]["tag"]);
-                install_list["packages"][k]["url_scheme"]   = repos[r]["url_scheme"];
-                install_list["packages"][k]["url_host"]     = repos[r]["url_host"];
-                install_list["packages"][k]["url_path"]     = results[i]["remote"];
-                install_list["packages"][k]["checksum"]     = results[i]["checksum"];
-            }
+            #
+            # Case C: package is not installed
+            if (options["upgrade"])
+                continue;
+            add_package_to_list(install_list, 0, results[p], repos[r]);
         }
     }
+
+    delete results;
+    delete repos;
 
     #
     # Step 3: Prompt user

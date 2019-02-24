@@ -5,16 +5,16 @@ function do_query(index_dat, query, results, search_mode, strict,    j, n, got, 
     if (strict) for (j in query) query[j] = "^" query[j] "$";
 
     while ((getline < index_dat) > 0) {
-        got["repo_id"]  = $2;
-        got["location"] = $6;
-        got["series"]   = $7;
-        got["name"]     = $8;
-        got["version"]  = $9;
-        got["arch"]     = $10;
-        got["build"]    = $11;
-        got["tag"]      = $12;
-        got["type"]     = $13;
-        got["checksum"] = $14;
+        got["repo_id"]  = $1;
+        got["location"] = $2;
+        got["series"]   = $3;
+        got["name"]     = $4;
+        got["version"]  = $5;
+        got["arch"]     = $6;
+        got["build"]    = $7;
+        got["tag"]      = $8;
+        got["type"]     = $9;
+        got["checksum"] = $10;
 
         if (got["repo_id"]   ~ query["repo_id"]  &&
             got["series"]    ~ query["series"]   &&

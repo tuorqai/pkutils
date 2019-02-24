@@ -70,9 +70,7 @@ function make_index(repo, output,    package, m) {
             continue;
         }
 
-        print repo["type"], repo["name"], repo["url_scheme"], \
-            repo["url_host"], repo["url_path"], \
-            package["location"], package["series"], \
+        print repo["name"], package["location"], package["series"], \
             package["name"], package["version"], package["arch"], \
             package["build"], package["tag"], package["type"], \
             package["checksum"] >> output;
@@ -145,16 +143,29 @@ function pkupd(dirs, repos,    r, total_repos, index_dat) {
 
 BEGIN {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^--root=.+/) {
-            match(ARGV[i], /^(--root=)(.*)/, m);
-            root = m[2];
+        if (ARGV[i] ~ /^-[^=]+$/) {
+            if (ARGV[i] ~ /^(-h|-?|--help)$/)   options["help"] = 1;
+            else {
+                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
+                exit 1;
+            }
+        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
+            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
+            option = m[1];
+            value  = m[2];
+
+            if (option ~ /^-R$|^--root$/)       options["root"] = value;
+            else {
+                printf "Unrecognized option: %s\n", option >> "/dev/stderr";
+                exit 1;
+            }
         } else {
             printf "Unrecognized argument: %s!\n", ARGV[i];
             exit 1;
         }
     }
 
-    if (!setup_dirs(dirs, root, 0)) {
+    if (!setup_dirs(dirs, options["root"], 0)) {
         printf "Failed to set up directories.\n" >> "/dev/stderr";
         exit 1;
     }

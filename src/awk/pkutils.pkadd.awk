@@ -2,57 +2,48 @@
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 
-function prompt_packages2(list,    p) {
-    if (list["count"] == 0)
-        return;
+function pkadd_parse_arguments(argc, argv, _options, _query,    i, m) {
+    for (i = 1; i < argc; i++) {
+        if (argv[i] ~ /^-[^=]+$/) {
+                 if (argv[i] ~ /^(-u|--upgrade)$/)      _options["upgrade"] = 1;
+            else if (argv[i] ~ /^(-f|--reinstall)$/)    _options["force"] = 1;
+            else if (argv[i] ~ /^(-d|--dry-run)$/)      _options["dryrun"] = 1;
+            else {
+                printf "Unrecognized option: %s\n", argv[i] >> "/dev/stderr";
+                return 0;
+            }
+        } else if (argv[i] ~ /^-([^=]+)=([^=]+)$/) {
+            match(argv[i], /^([^=]+)=([^=]+)$/, m);
 
-    printf "%d package(s) will be %s:\n", list["count"], toupper(list["action"]);
-    for (p = 1; p <= list["count"]; p++) {
-        printf "-- %s (%s)\n", list["packages"][p]["name"], list["packages"][p]["hint"];
-    }
-}
-
-function process_packages2(list, options,    p) {
-    if (list["count"] == 0)
-        return;
-
-    if (options["root"])
-        list["command"] = sprintf("%s --root %s", list["command"], options["root"]);
-
-    for (p = 1; p <= list["count"]; p++) {
-        if (options["dryrun"] == 1) {
-            printf ">> %s %s\n", list["command"], list["packages"][p]["file"];
-            continue;
+                 if (m[1] ~ /^-R$|^--root$/)    { _options["root"]  = m[2]; }
+            else if (m[1] ~ /^-r$|^--repo$/)    { _query["repo_id"] = _query["repo_id"] "|" m[2]; }
+            else if (m[1] ~ /^-e$|^--series$/)  { _query["series"]  = _query["series"]  "|" m[2]; }
+            else if (m[1] ~ /^-v$|^--version$/) { _query["version"] = _query["version"] "|" m[2]; }
+            else if (m[1] ~ /^-a$|^--arch$/)    { _query["arch"]    = _query["arch"]    "|" m[2]; }
+            else if (m[1] ~ /^-t$|^--tag$/)     { _query["tag"]     = _query["tag"]     "|" m[2]; }
+            else {
+                printf "Unrecognized option: %s\n", m[1] >> "/dev/stderr";
+                return 0;
+            }
+        } else {
+            _query["name"] = _query["name"] "|" argv[i];
         }
-
-        system(sprintf("%s %s", list["command"], list["packages"][p]["file"]));
-    }
-}
-
-function answer(prompt, def,    reply) {
-    if (def == "y")
-        printf "%s [Y/n] ", prompt;
-    else
-        printf "%s [y/N] ", prompt;
-
-    getline reply < "/dev/stdin";
-    reply = tolower(reply);
-
-    if (def == "y") {
-        if (reply == "n")
-            return 0;
-        return 1;
     }
 
-    if (reply == "y")
-        return 1;
-    return 0;
+    return 1;
 }
 
-function get_repo_idx(name, repos,    r) {
-    for (r in repos) {
-        if (repos[r]["name"] == name) {
-            return r;
+function pkadd_query(results, _query,    i) {
+    for (i in _query) {
+        sub(/^\|/, "", _query[i]);
+    }
+    return pk_query(results, _query, dirs["lib"] "/index.dat", 1, 1);
+}
+
+function pkadd_repo_get_index(name, repos,    i) {
+    for (i in repos) {
+        if (repos[i]["name"] == name) {
+            return i;
         }
     }
 
@@ -60,217 +51,63 @@ function get_repo_idx(name, repos,    r) {
     return 0;
 }
 
-function fetch_all_packages(list,    errors, p) {
-    for (p = 1; p <= list["count"]; p++) {
-        errors += fetch_file(list["packages"][p]["url_scheme"],
-                             list["packages"][p]["url_host"],
-                             list["packages"][p]["url_path"],
-                             list["packages"][p]["file"],
-                             list["packages"][p]["checksum"]);
+function pkadd_elist_add(elist, oldpk, pk, repo,    i) {
+    i = ++elist["count"];
+    elist["packages"][i]["name"]        = pk["name"];
+    elist["packages"][i]["file"]        = pk["output"];
+    elist["packages"][i]["url_scheme"]  = repo["url_scheme"];
+    elist["packages"][i]["url_host"]    = repo["url_host"];
+    elist["packages"][i]["url_path"]    = pk["remote"];
+    elist["packages"][i]["checksum"]    = pk["checksum"];
+    elist["packages"][i]["hint"]        = sprintf("%s-%s-%s%s",
+                                                  pk["version"],
+                                                  pk["arch"],
+                                                  pk["build"],
+                                                  pk["tag"]);
+
+    if (isarray(oldpk)) {
+        elist["packages"][i]["hint"] = sprintf("%s-%s-%s%s -> %s",
+                                               oldpk["version"],
+                                               oldpk["arch"],
+                                               oldpk["build"],
+                                               oldpk["tag"],
+                                               elist["packages"][i]["hint"]);
+    }
+}
+
+function pkadd_elist_prompt(elist,    i) {
+    if (elist["count"] == 0) {
+        return;
+    }
+
+    printf "%d package(s) will be %s:\n", elist["count"], toupper(elist["action"]);
+    for (i = 1; i <= elist["count"]; i++) {
+        printf "-- %s (%s)\n", elist["packages"][i]["name"], elist["packages"][i]["hint"];
+    }
+}
+
+function pkadd_elist_fetch_all(elist,    errors, i) {
+    for (i = 1; i <= elist["count"]; i++) {
+        errors += pk_fetch_file(elist["packages"][i]["url_scheme"],
+                                elist["packages"][i]["url_host"],
+                                elist["packages"][i]["url_path"],
+                                elist["packages"][i]["file"],
+                                elist["packages"][i]["checksum"]);
     }
 
     return errors;
 }
 
-function compare_packages(a, b) {
-    if (a["name"]    == b["name"]    &&
-        a["version"] == b["version"] &&
-        a["arch"]    == b["arch"]    &&
-        a["build"]   == b["build"]   &&
-        a["tag"]     == b["tag"])
-    {
+function pkadd_fetch(elistr, elisti, elistu, options,    errors) {
+    if (options["dryrun"]) {
+        printf "Dry run - do not download anything.\n";
         return 1;
     }
 
-    return 0;
-}
-
-function is_package_locked(pk, locked,    x) {
-    for (x in locked) {
-        if (compare_packages(pk, locked[x])) {
-            return 1;
-        }
-    }
-    return 0;
-}
-
-function add_package_to_list(list, oldpk, newpk, repo, u,    x) {
-    x = ++list["count"];
-    list["packages"][x]["name"]       = newpk["name"];
-    list["packages"][x]["file"]       = newpk["output"];
-    
-    list["packages"][x]["url_scheme"] = repo["url_scheme"];
-    list["packages"][x]["url_host"]   = repo["url_host"];
-    list["packages"][x]["url_path"]   = newpk["remote"];
-    list["packages"][x]["checksum"]   = newpk["checksum"];
-
-    if (oldpk) {
-        list["packages"][x]["hint"] = sprintf("%s-%s-%s%s -> %s-%s-%s%s",
-                                              oldpk["version"],
-                                              oldpk["arch"],
-                                              oldpk["build"],
-                                              oldpk["tag"]);
-    } else {
-        list["packages"][x]["hint"] = sprintf("%s-%s-%s%s",
-                                              newpk["version"],
-                                              newpk["arch"],
-                                              newpk["build"],
-                                              newpk["tag"]);
-    }
-}
-
-BEGIN {
-    for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^=]+$/) {
-                 if (ARGV[i] ~ /^(-u|--upgrade)$/)      options["upgrade"] = 1;
-            else if (ARGV[i] ~ /^(-f|--reinstall)$/)    options["force"] = 1;
-            else if (ARGV[i] ~ /^(-d|--dry-run)$/)      options["dryrun"] = 1;
-            else {
-                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
-                exit 1;
-            }
-        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
-            option = m[1];
-            value  = m[2];
-
-                 if (option ~ /^-R$|^--root$/)      options["root"]     = value;
-            else if (option ~ /^-r$|^--repo$/)      query["repo_id"]    = query["repo_id"] "|" value;
-            else if (option ~ /^-e$|^--series$/)    query["series"]     = query["series"]  "|" value;
-            else if (option ~ /^-v$|^--version$/)   query["version"]    = query["version"] "|" value;
-            else if (option ~ /^-a$|^--arch$/)      query["arch"]       = query["arch"]    "|" value;
-            else if (option ~ /^-t$|^--tag$/)       query["tag"]        = query["tag"]     "|" value;
-            else {
-                printf "Unrecognized option: %s\n", option >> "/dev/stderr";
-                exit 1;
-            }
-        } else {
-            query["name"] = query["name"] "|" ARGV[i];
-        }
-    }
-
-    if (!setup_dirs(dirs, options["root"], 0)) {
-        printf "Failed to set up directories.\n" > "/dev/stderr";
-        exit 1;
-    }
-
-    #
-    # Step 1: look for packages
-
-    for (j in query)
-        sub(/^\|/, "", query[j]);
-    n = do_query(dirs["lib"]"/index.dat", query, results, 0, 1);
-    if (!n) {
-        printf "No packages found.\n";
-    }
-
-    #
-    # Step 1.1: look up installed packages and get repos info
-
-    make_current_state(dirs, installed);
-    parse_repos_list(dirs["etc"]"/repos.list", repos);
-    parse_lock_list(sprintf("%s/lock.list", dirs["etc"]), lock_list);
-
-    #
-    # Step 2: detect which packages should be upgraded or installed
-
-    reinstall_list["action"] = "reinstalled";
-    reinstall_list["command"] = "upgradepkg --reinstall";
-    reinstall_list["count"] = 0;
-    reinstall_list["packages"][0] = 0;
-
-    install_list["action"] = "installed";
-    install_list["command"] = "installpkg";
-    install_list["count"] = 0;
-    install_list["packages"][0] = 0;
-
-    upgrade_list["action"] = "upgraded";
-    upgrade_list["command"] = "upgradepkg";
-    upgrade_list["count"] = 0;
-    upgrade_list["packages"][0] = 0;
-
-    for (p = 1; p <= n; p++) {
-        r = get_repo_idx(results[p]["repo_id"], repos);
-        if (!r) exit 1;
-
-        results[p]["fullname"] = sprintf("%s-%s-%s-%s%s.%s",
-                                         results[p]["name"],
-                                         results[p]["version"],
-                                         results[p]["arch"],
-                                         results[p]["build"],
-                                         results[p]["tag"],
-                                         results[p]["type"]);
-        results[p]["remote"]   = sprintf("%s/%s/%s",
-                                         repos[r]["url_path"],
-                                         results[p]["location"],
-                                         results[p]["fullname"]);
-        results[p]["output"]   = sprintf("%s/%s/%s",
-                                         dirs["cache"],
-                                         repos[r]["name"],
-                                         results[p]["fullname"]);
-
-        name = results[p]["name"];
-
-        if (name in installed) {
-            if (results[p]["version"] == installed[name]["version"]) {
-                #
-                # Case A: same package of exact same version is installed
-                if (options["force"]) {
-                    add_package_to_list(reinstall_list, 0, results[p], repos[r]);
-                    continue;
-                }
-
-                if (query["name"])
-                    printf "Package %s (%s) installed already.\n", name, results[p]["version"];
-            } else {
-                #
-                # Case B: same package is installed but version is different
-                if (is_package_locked(installed[name], lock_list)) {
-                    printf "Package %s (%s) is locked.\n", name, results[p]["version"];
-                    continue;
-                }
-
-                add_package_to_list(upgrade_list, installed[name], results[p], repos[r]);
-            }
-        } else {
-            #
-            # Case C: package is not installed
-            if (options["upgrade"])
-                continue;
-            add_package_to_list(install_list, 0, results[p], repos[r]);
-        }
-    }
-
-    delete results;
-    delete repos;
-
-    #
-    # Step 3: Prompt user
-
-    if (reinstall_list["count"] == 0 &&
-        install_list["count"]   == 0 &&
-        upgrade_list["count"]   == 0)
-    {
-        printf "Nothing to do.\n";
-        exit 0;
-    }
-
-    prompt_packages2(reinstall_list);
-    prompt_packages2(install_list);
-    prompt_packages2(upgrade_list);
-
-    if (answer("Continue?", "y") == 0) {
-        printf "OK...\n";
-        exit 0;
-    }
-
-    #
-    # Step 4: download packages to cache
-
     while (1) {
-        errors += fetch_all_packages(reinstall_list);
-        errors += fetch_all_packages(install_list);
-        errors += fetch_all_packages(upgrade_list);
+        errors += pkadd_elist_fetch_all(elistr);
+        errors += pkadd_elist_fetch_all(elisti);
+        errors += pkadd_elist_fetch_all(elistu);
 
         if (!errors) {
             printf "All packages downloaded successfully.\n";
@@ -278,20 +115,161 @@ BEGIN {
         }
 
         printf "Failed to download %d packages.\n", errors > "/dev/stderr";
-        if (answer("Retry?", "n") == 1) {
+        if (pk_answer("Retry?", "n") == 1) {
             errors = 0;
             continue;
         }
 
-        exit 1;
+        return 0;
+    }
+    return 1;
+}
+
+function pkadd_elist_process(elist, options,    i) {
+    if (elist["count"] == 0) {
+        return;
     }
 
-    #
-    # Step N: actually reinstall/install/upgrade packages
+    if (options["root"]) {
+        elist["command"] = sprintf("%s --root %s", elist["command"], options["root"]);
+    }
 
-    process_packages2(reinstall_list, options);
-    process_packages2(install_list, options);
-    process_packages2(upgrade_list, options);
+    for (i = 1; i <= elist["count"]; i++) {
+        if (options["dryrun"]) {
+            printf ">> %s %s\n", elist["command"], elist["packages"][i]["file"];
+            continue;
+        }
+
+        system(elist["command"] " " elist["packages"][i]["file"]);
+    }
+}
+
+function pkadd_main(    i, j, options, query, packages, total_packages, installed,
+                        repos, locked, elistr, elisti, elistu,
+                        pkstatus, oldpk)
+{
+    if (!pkadd_parse_arguments(ARGC, ARGV, options, query)) {
+        return 1;
+    }
+
+    pk_setup_dirs(dirs, options["root"]);
+    if (!pk_check_dirs(dirs)) {
+        printf "Run `pkupd' first!\n";
+        return 1;
+    }
+
+    total_packages = pkadd_query(packages, query);
+    if (total_packages <= 0) {
+        printf "No packages found.\n";
+        return 0;
+    }
+
+    pk_get_installed_packages(dirs, installed);
+    pk_parse_repos_list(dirs, repos);
+    pk_parse_lock_list(dirs, locked);
+
+    elistr["action"] = "reinstalled";
+    elistr["command"] = "upgradepkg --reinstall";
+    elistr["count"] = 0;
+    elistr["packages"][0] = 0;
+
+    elisti["action"] = "installed";
+    elisti["command"] = "installpkg";
+    elisti["count"] = 0;
+    elisti["packages"][0] = 0;
+
+    elistu["action"] = "upgraded";
+    elistu["command"] = "upgradepkg";
+    elistu["count"] = 0;
+    elistu["packages"][0] = 0;
+
+    for (i = 1; i <= total_packages; i++) {
+        j = pkadd_repo_get_index(packages[i]["repo_id"], repos);
+        if (j <= 0) {
+            return 1;
+        }
+
+        packages[i]["fullname"] = sprintf("%s-%s-%s-%s%s.%s",
+                                          packages[i]["name"],
+                                          packages[i]["version"],
+                                          packages[i]["arch"],
+                                          packages[i]["build"],
+                                          packages[i]["tag"],
+                                          packages[i]["type"]);
+        packages[i]["remote"]   = sprintf("%s/%s/%s",
+                                          repos[j]["url_path"],
+                                          packages[i]["location"],
+                                          packages[i]["fullname"]);
+        packages[i]["output"]   = sprintf("%s/%s/%s",
+                                          dirs["cache"],
+                                          repos[j]["name"],
+                                          packages[i]["fullname"]);
+
+        pkstatus = pk_is_installed(packages[i], installed, oldpk);
+
+        if (pkstatus == 1) {
+            #
+            # Case A: same package of exact same version is installed
+            if (options["force"]) {
+                pkadd_elist_add(elistr, 0, packages[i], repos[j]);
+                continue;
+            }
+
+            if (query["name"]) {
+                printf "Package %s (%s) installed already.\n", packages[i]["name"], packages[i]["version"];
+            }
+        } else if (pkstatus == 2) {
+            #
+            # Case B: same package is installed but version is different
+            if (pk_is_locked(packages[i], locked)) {
+                printf "Package %s (%s) is locked.\n", packages[i]["name"], packages[i]["version"];
+                continue;
+            }
+
+            pkadd_elist_add(elistu, oldpk, packages[i], repos[j]);
+        } else {
+            #
+            # Case C: package is not installed
+            if (options["upgrade"]) {
+                continue;
+            }
+            pkadd_elist_add(elisti, 0, packages[i], repos[j]);
+        }
+    }
+
+    delete packages;
+    delete repos;
+
+    if (elistr["count"] == 0 &&
+        elisti["count"] == 0 &&
+        elistu["count"] == 0)
+    {
+        printf "Nothing to do.\n";
+        exit 0;
+    }
+
+    pkadd_elist_prompt(elistr);
+    pkadd_elist_prompt(elisti);
+    pkadd_elist_prompt(elistu);
+
+    if (pk_answer("Continue?", "y") == 0) {
+        printf "Exiting...\n";
+        return 1;
+    }
+
+    if (!pkadd_fetch(elistr, elisti, elistu, options)) {
+        printf "Exiting...\n";
+        return 1;
+    }
+
+    pkadd_elist_process(elistr, options);
+    pkadd_elist_process(elisti, options);
+    pkadd_elist_process(elistu, options);
 
     printf "Done.\n";
+}
+
+BEGIN {
+    rc = pkadd_main();
+    exit rc;
 }

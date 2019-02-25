@@ -1,7 +1,34 @@
 
 @include "pkutils.foundation.awk"
 
-function read_checksums(repo,    m, file) {
+function pkupd_parse_arguments(argc, argv, options,    i, m) {
+    for (i = 1; i < argc; i++) {
+        if (argv[i] ~ /^-[^=]+$/) {
+            if (argv[i] ~ /^(-h|-?|--help)$/) {
+                options["help"] = 1;
+            } else {
+                printf "Unrecognized option: %s\n", argv[i] >> "/dev/stderr";
+                return 0;
+            }
+        } else if (argv[i] ~ /^-([^=]+)=([^=]+)$/) {
+            match(argv[i], /^([^=]+)=([^=]+)$/, m);
+
+            if (m[1] ~ /^-R$|^--root$/) {
+                options["root"] = m[2];
+            } else {
+                printf "Unrecognized option: %s\n", m[1] >> "/dev/stderr";
+                return 0;
+            }
+        } else {
+            printf "Unrecognized argument: %s!\n", argv[i];
+            return 0;
+        }
+    }
+
+    return 1;
+}
+
+function pkupd_read_checksums(repo,    m, file) {
     RS = "\n"; FS = " ";
 
     while ((getline < repo["checksums_txt"]) > 0) {
@@ -13,14 +40,69 @@ function read_checksums(repo,    m, file) {
         }
     }
     close(repo["checksums_txt"]);
-    delete repo["checksums_txt"];
 }
 
-function make_index(repo, output,    package, m) {
+function pkupd_sync_repo(repo,    index_txt, failed) {
+    # quite dirty, but gotta somehow handle official repo's layout
+    if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
+        repo["url_path"] = repo["url_path"] "/" repo["name"];
+    }
+
+    printf "[%s] Updating %s://%s...\n", repo["type"], repo["url_scheme"], repo["url_path"];
+
+    if (repo["type"] == "pk") {
+        index_txt = "PACKAGES.TXT";
+    } else if (repo["type"] == "sb") {
+        index_txt = "SLACKBUILDS.TXT";
+    } else {
+        printf "-- Internal error: bad repo type %s!\n", repo["type"] > "/dev/stderr";
+        return 0;
+    }
+
+    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
+                         sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
+                         sprintf("%s/CHECKSUMS.md5", repo["dir"]));
+    
+    repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
+    pkupd_read_checksums(repo);
+
+    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
+                         sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
+                         sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
+                         repo["checksums"]["CHECKSUMS.md5.asc"]);
+    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
+                         sprintf("%s/%s", repo["url_path"], index_txt),
+                         sprintf("%s/%s", repo["dir"], index_txt),
+                         repo["checksums"][index_txt]);
+    repo["index_txt"] = sprintf("%s/%s", repo["dir"], index_txt);
+
+    if (failed > 0) {
+        printf "-- Failed to retrieve %d files.\n", failed > "/dev/stderr";
+        return 0;
+    }
+
+    printf "\n";
+    return 1;
+}
+
+function pkupd_sync_repos(repos, total_repos,    i) {
+    for (i = total_repos; i >= 1; i--) {
+        if (!pkupd_sync_repo(repos[i])) {
+            printf "Error: failed to synchronize \"%s\" repo!\n", repos[i]["name"] > "/dev/stderr";
+            delete repos[i];
+            return 0;
+        }
+    }
+    return 1;
+}
+
+function pkupd_index_repo(repo, packages, total,    file, m) {
     FS = "\n"; RS = "";
     OFS = ":"; ORS = "\n";
 
-    while ((getline < repo["txt"]) > 0) {
+    printf "Indexing %s...\n", repo["name"];
+
+    while ((getline < repo["index_txt"]) > 0) {
         if ($0 ~ /^PACKAGE\s+/) {
             for (i = 1; i < NF; i++) {
                 if ($i ~ /^PACKAGE NAME:\s+.*/) {
@@ -39,13 +121,16 @@ function make_index(repo, output,    package, m) {
 
                     package["location"] = $i;
                     package["series"] = m[1];
+                } else if ($i ~ "^" package["name"] ": " package["name"] " \\(.+\\)$") {
+                    match($i, "^" package["name"] ": " package["name"] " \\((.+)\\)$", m);
+
+                    package["description"] = m[1];
                 }
             }
-            package["file"] = sprintf("%s-%s-%s-%s%s.%s",
+            file = sprintf("%s-%s-%s-%s%s.%s",
                 package["name"], package["version"], package["arch"],
                 package["build"], package["tag"], package["type"]);
-            package["checksum"] = repo["checksums"][package["file"]];
-            delete package["file"];
+            package["checksum"] = repo["checksums"][file];
         } else if ($0 ~ /^SLACKBUILD\s+/) {
             for (i = 1; i < NF; i++) {
                 if ($i ~ /^SLACKBUILD NAME:\s+/) {
@@ -70,110 +155,73 @@ function make_index(repo, output,    package, m) {
             continue;
         }
 
-        print repo["name"], package["location"], package["series"], \
-            package["name"], package["version"], package["arch"], \
-            package["build"], package["tag"], package["type"], \
-            package["checksum"] >> output;
+        if (!package["description"]) {
+            package["description"] = "(no description)";
+        }
+        
+        total++;
+        packages[total]["repo_id"]      = repo["name"];
+        packages[total]["location"]     = package["location"];
+        packages[total]["series"]       = package["series"];
+        packages[total]["name"]         = package["name"];
+        packages[total]["version"]      = package["version"];
+        packages[total]["arch"]         = package["arch"];
+        packages[total]["build"]        = package["build"];
+        packages[total]["tag"]          = package["tag"];
+        packages[total]["type"]         = package["type"];
+        packages[total]["checksum"]     = package["checksum"];
+        packages[total]["description"]  = package["description"];
+
+        delete package["description"];
     }
-    close(repo["txt"]);
-    delete repo["txt"];
+    close(repo["index_txt"]);
+
+    return total;
 }
 
-function update_and_index_repo(repo, index_dat,    index_txt, status) {
-    # quite dirty, but gotta somehow handle official repo's layout
-    if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
-        repo["url_path"] = sprintf("%s/%s", repo["url_path"], repo["name"]);
+function pkupd_make_package_list(repos, total_repos, packages,    i, total) {
+    for (i = total_repos; i >= 1; i--) {
+        if (!(i in repos)) {
+            continue;
+        }
+        total = pkupd_index_repo(repos[i], packages, total);
     }
 
-    printf "[%s] Updating and indexing %s://%s...\n", repo["type"], repo["url_scheme"], repo["url_path"];
-
-    if (repo["type"] == "pk") {
-        index_txt = "PACKAGES.TXT";
-    } else if (repo["type"] == "sb") {
-        index_txt = "SLACKBUILDS.TXT";
-    } else {
-        printf "-- Internal error: bad repo type %s!\n", repo["type"] > "/dev/stderr";
-        return 0;
-    }
-
-    status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
-                         sprintf("%s/CHECKSUMS.md5", repo["dir"]));
-    
-    repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
-    read_checksums(repo);
-
-    status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
-                         sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
-                         repo["checksums"]["CHECKSUMS.md5.asc"]);
-    status += fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/%s", repo["url_path"], index_txt),
-                         sprintf("%s/%s", repo["dir"], index_txt),
-                         repo["checksums"][index_txt]);
-    repo["txt"] = sprintf("%s/%s", repo["dir"], index_txt);
-
-    if (status > 0) {
-        printf "-- Failed to retrieve %d files.\n", status > "/dev/stderr";
-        return 0;
-    }
-
-    make_index(repo, index_dat);
-    printf "\n";
-    return 1;
+    return total;
 }
 
-function pkupd(dirs, repos,    r, total_repos, index_dat) {
-    index_dat = sprintf("%s/index.dat", dirs["lib"]);
+function pkupd_write_package_list(db, packages, total_packages,    i) {
+    printf "" > db;
 
-    # is there a better way to wipe out a file?
-    printf "" > index_dat;
+    for (i = 1; i <= total_packages; i++) {
+        print packages[i]["repo_id"], packages[i]["location"], packages[i]["series"], \
+            packages[i]["name"], packages[i]["version"], packages[i]["arch"], \
+            packages[i]["build"], packages[i]["tag"], packages[i]["type"], \
+            packages[i]["checksum"], packages[i]["description"] >> db;
+    }
+}
 
-    total_repos = length(repos);
+function pkupd_main(    options, dirs, repos, total_repos, packages, total_packages, status) {
+    if (!pkupd_parse_arguments(ARGC, ARGV, options)) {
+        return 1;
+    }
 
-    for (r = total_repos; r >= 1; r--) {
-        if (!update_and_index_repo(repos[r], index_dat)) {
-            printf "Error: failed to synchronize \"%s\" repo!\n", repos[r]["name"] > "/dev/stderr";
-            return 0;
+    pk_setup_dirs(dirs, options["root"]);
+    if (!pk_check_dirs(dirs)) {
+        printf "Have a nice day!\n";
+        if (!pk_populate_dirs(dirs)) {
+            printf "Failed to set up directories.\n" >> "/dev/stderr";
+            return 1;
         }
     }
-    fflush(index_dat);
-    return 1;
+
+    total_repos = pk_parse_repos_list(dirs, repos);
+    pkupd_sync_repos(repos, total_repos);
+    total_packages = pkupd_make_package_list(repos, total_repos, packages);
+    pkupd_write_package_list(dirs["lib"] "/index.dat", packages, total_packages);
 }
 
 BEGIN {
-    for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^=]+$/) {
-            if (ARGV[i] ~ /^(-h|-?|--help)$/)   options["help"] = 1;
-            else {
-                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
-                exit 1;
-            }
-        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
-            option = m[1];
-            value  = m[2];
-
-            if (option ~ /^-R$|^--root$/)       options["root"] = value;
-            else {
-                printf "Unrecognized option: %s\n", option >> "/dev/stderr";
-                exit 1;
-            }
-        } else {
-            printf "Unrecognized argument: %s!\n", ARGV[i];
-            exit 1;
-        }
-    }
-
-    if (!setup_dirs(dirs, options["root"], 0)) {
-        printf "Failed to set up directories.\n" >> "/dev/stderr";
-        exit 1;
-    }
-
-    parse_repos_list(sprintf("%s/repos.list", dirs["etc"]), repos);
-    status = pkupd(dirs, repos);
-    if (!status) {
-        printf "Failed to synchronize repositories!\n" > "/dev/stderr";
-        exit 1;
-    }
+    rc = pkupd_main();
+    exit rc;
 }

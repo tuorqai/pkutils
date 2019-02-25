@@ -1,46 +1,44 @@
 
-function do_query(index_dat, query, results, search_mode, strict,    j, n, got, stash) {
+function pk_query(results, query, db, strict, action,    i, total, stash) {
     FS = ":"; RS = "\n";
 
-    if (strict) for (j in query) query[j] = "^" query[j] "$";
-
-    while ((getline < index_dat) > 0) {
-        got["repo_id"]  = $1;
-        got["location"] = $2;
-        got["series"]   = $3;
-        got["name"]     = $4;
-        got["version"]  = $5;
-        got["arch"]     = $6;
-        got["build"]    = $7;
-        got["tag"]      = $8;
-        got["type"]     = $9;
-        got["checksum"] = $10;
-
-        if (got["repo_id"]   ~ query["repo_id"]  &&
-            got["series"]    ~ query["series"]   &&
-            got["name"]      ~ query["name"]     &&
-            got["version"]   ~ query["version"]  &&
-            got["arch"]      ~ query["arch"]     &&
-            got["tag"]       ~ query["tag"])
-        {
-            if (!search_mode) {
-                if (got["name"] in stash) continue;
-                stash[got["name"]] = 1;
-            }
-
-            n++;
-            results[n]["repo_id"]     = got["repo_id"];
-            results[n]["location"]    = got["location"];
-            results[n]["series"]      = got["series"];
-            results[n]["name"]        = got["name"];
-            results[n]["version"]     = got["version"];
-            results[n]["arch"]        = got["arch"];
-            results[n]["build"]       = got["build"];
-            results[n]["tag"]         = got["tag"];
-            results[n]["type"]        = got["type"];
-            results[n]["checksum"]    = got["checksum"];
+    if (strict) {
+        for (i in query) {
+            query[i] = "^" query[i] "$";
         }
     }
-    close(index_dat);
-    return n;
+
+    while ((getline < db) > 0) {
+        if (($1 ~ query["repo_id"]) && ($3 ~ query["series"])  &&
+            ($4 ~ query["name"])    && ($5 ~ query["version"]) &&
+            ($6 ~ query["arch"])    && ($8 ~ query["tag"]) &&
+            ($11 ~ query["desc"]))
+        {
+            if (action) {
+                # `action' means that we have to return only one
+                # version of a package
+                if ($4 in stash) {
+                    continue;
+                }
+
+                stash[$4] = 1;
+            }
+    
+            total++;
+            results[total]["repo_id"]     = $1;
+            results[total]["location"]    = $2;
+            results[total]["series"]      = $3;
+            results[total]["name"]        = $4;
+            results[total]["version"]     = $5;
+            results[total]["arch"]        = $6;
+            results[total]["build"]       = $7;
+            results[total]["tag"]         = $8;
+            results[total]["type"]        = $9;
+            results[total]["checksum"]    = $10;
+            results[total]["description"] = $11;
+        }
+    }
+
+    close(db);
+    return total;
 }

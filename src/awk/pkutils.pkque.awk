@@ -2,47 +2,96 @@
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 
-BEGIN {
-    for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-(s|-strict)$/) {
-            strict = 1;
-        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
-            option = m[1];
-            value = m[2];
+function pkque_parse_arguments(argc, argv, options, query,    i, m) {
+    for (i = 1; i < argc; i++) {
+        if (argv[i] ~ /^-(s|-strict)$/) {
+            options["strict"] = 1;
+        } else if (argv[i] ~ /^-([^=]+)=([^=]+)$/) {
+            match(argv[i], /^([^=]+)=([^=]+)$/, m);
 
-            if (option ~ /^-R$|^--root$/)           root = value;
-            else if (option ~ /^-r$|^--repo$/)      query["repo_id"] = query["repo_id"] "|" value;
-            else if (option ~ /^-e$|^--series$/)    query["series"]  = query["series"]  "|" value;
-            else if (option ~ /^-v$|^--version$/)   query["version"] = query["version"] "|" value;
-            else if (option ~ /^-a$|^--arch$/)      query["arch"]    = query["arch"]    "|" value;
-            else if (option ~ /^-t$|^--tag$/)       query["tag"]     = query["tag"]     "|" value;
+            if (m[1] ~ /^-R$|^--root$/)           options["root"]  = m[2];
+            else if (m[1] ~ /^-r$|^--repo$/)      query["repo_id"] = query["repo_id"] "|" m[2];
+            else if (m[1] ~ /^-e$|^--series$/)    query["series"]  = query["series"]  "|" m[2];
+            else if (m[1] ~ /^-v$|^--version$/)   query["version"] = query["version"] "|" m[2];
+            else if (m[1] ~ /^-a$|^--arch$/)      query["arch"]    = query["arch"]    "|" m[2];
+            else if (m[1] ~ /^-t$|^--tag$/)       query["tag"]     = query["tag"]     "|" m[2];
+            else if (m[1] ~ /^-d$|^--desc$/)      query["desc"]    = query["desc"]    "|" m[2];
             else {
-                printf "Unrecognized option: %s\n", option;
-                exit 1;
+                printf "Unrecognized option: %s\n", m[1];
+                return 0;
             }
         } else {
-            query["name"] = query["name"] "|" ARGV[i];
+            query["name"] = query["name"] "|" argv[i];
         }
     }
 
-    for (j in query) sub(/^\|/, "", query[j]);
-
-    setup_dirs(dirs, root, 1);
-
-    n = do_query(dirs["lib"]"/index.dat", query, results, 1, strict);
-    if (!n) {
-        printf "No packages found.\n";
-        exit 0;
+    for (i in query) {
+        sub(/^\|/, "", query[i]);
     }
 
-    printf "%d packages found:\n", n;
+    return 1;
+}
 
-    for (p = 1; p <= n; p++) {
-        printf "%-18s%-32s%s-%s-%s%s\n", results[p]["repo_id"],
-            results[p]["name"], results[p]["version"], results[p]["arch"],
-            results[p]["build"], results[p]["tag"];
+function pkque_print_package(pk, installed,    status) {
+    status = pk_is_installed(pk, installed);
+
+    if (status == 1) {
+        status = "installed";
+    } else if (status == 2) {
+        status = "different version installed";
+    }
+
+    if (status) {
+        printf "\n%s:%s/%s %s-%s-%s%s [%s]\n  %s\n",
+            pk["repo_id"], pk["series"], pk["name"],
+            pk["version"], pk["arch"], pk["build"], pk["tag"],
+            status, pk["description"];
+    } else {
+        printf "\n%s:%s/%s %s-%s-%s%s\n  %s\n",
+            pk["repo_id"], pk["series"], pk["name"],
+            pk["version"], pk["arch"], pk["build"], pk["tag"],
+            pk["description"];
+    }
+}
+
+function pkque_query(results, query, dirs, options) {
+    return pk_query(results, query, dirs["lib"] "/index.dat", options["strict"], 0);
+}
+
+function pkque_main(    i, dirs, options, query, packages, total_results, installed) {
+    if (!pkque_parse_arguments(ARGC, ARGV, options, query)) {
+        return 1;
+    }
+
+    pk_setup_dirs(dirs, options["root"]);
+
+    if (!pk_check_dirs(dirs)) {
+        printf "Run `pkupd' first.\n";
+        return 0;
+    }
+
+    total_results = pkque_query(packages, query, dirs, options);
+    if (total_results < 1) {
+        printf "No packages found.\n";
+        return 0;
+    }
+
+    pk_get_installed_packages(dirs, installed);
+
+    for (i = 1; i <= total_results; i++) {
+        pkque_print_package(packages[i], installed);
+    }
+
+    if (total_results > 3) {
+        printf "\nTotal packages found: %d.\n", total_results;
     }
 
     printf "\n";
+
+    return 0;
+}
+
+BEGIN {
+    rc = pkque_main();
+    exit rc;
 }

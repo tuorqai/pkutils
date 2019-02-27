@@ -60,6 +60,10 @@ function pkadd_elist_add(elist, oldpk, pk, repo,    i) {
         }
     }
 
+    if (pk["repo_id"] == "local") {
+        return;
+    }
+
     i = ++elist["count"];
     elist["packages"][i]["name"]        = pk["name"];
     elist["packages"][i]["file"]        = pk["output"];
@@ -92,7 +96,6 @@ function pkadd_elist_prompt(elist,    i) {
     for (i = 1; i <= elist["count"]; i++) {
         printf "-- %s (%s)\n", elist["packages"][i]["name"], elist["packages"][i]["hint"];
     }
-    printf "\n";
 }
 
 function pkadd_elist_fetch_all(elist, options,    errors, i) {
@@ -149,27 +152,45 @@ function pkadd_elist_process(elist, options,    i) {
     }
 }
 
-function pkadd_insert_package(pk, repos, installed, locked, _er, _eu, _ei, options,
-                                  i, r, status, oldpk,
-                                  dep, total_deps, dep_names, dep_query, deps_found)
+function pkadd_insert_package(pk, repos, installed, locked, _er, _eu, _ei, options, __dqueue,
+                                  i, j, r, status, oldpk,
+                                  dep_name, dep, total_deps, dep_names, dep_query, deps_found)
 {
+    #
+    # TODO: this mess is a joke. gotta handle these things in more smart way.
     if (pk["required"] && options["use_deps"] && !options["upgrade"]) {
         total_deps = split(pk["required"], dep_names, /,/);
         for (i = 1; i <= total_deps; i++) {
-            sub(/[<>=][A-Za-z0-9\.]$/, "", dep_names[i]);
-            dep_query["name"] = dep_names[i];
-            deps_found = pkadd_query(dep, dep_query);
-            if (deps_found > 0) {
-                status = pkadd_insert_package(dep[1],
-                repos, installed, locked,
-                _er, _eu, _ei, options);
-                if (status == 0) { return 0; }
-                delete dep_query;
-                continue;
+            dep_name = dep_names[i];
+            sub(/[<>=][A-Za-z0-9\.]$/, "", dep_name);
+
+            if (dep_name in __dqueue) {
+                printf "Warning: found dependency loop: -> ";
+                for (j in __dqueue) {
+                    printf "%s -> ", j;
+                }
+                printf "\n";
+                break;
             }
 
-            printf "Warning: can't find dependency %s for %s\n", \
-                dep_names[i], pk["name"] >> "/dev/stderr";
+            dep_query["name"] = dep_name;
+            __dqueue[dep_name] = 1;
+            deps_found = pkadd_query(dep, dep_query);
+            if (deps_found == 0) {
+                printf "Warning: can't find dependency %s for %s\n",
+                    dep_name, pk["name"] >> "/dev/stderr";
+                delete __dqueue[dep_name];
+                break;
+            }
+
+            status = pkadd_insert_package(dep[1], repos, installed, locked,
+                _er, _eu, _ei, options, __dqueue);
+            if (status == 0) {
+                return 0;
+            }
+
+            delete dep_query;
+            delete __dqueue[dep_name];
         }
     }
 
@@ -285,7 +306,7 @@ function pkadd_main(    i, options, query, packages, total_packages, installed,
     pkadd_elist_prompt(elisti);
     pkadd_elist_prompt(elistu);
 
-    if (pk_answer("Continue?", "y") == 0) {
+    if (pk_answer("\nContinue?", "y") == 0) {
         printf "Exiting...\n";
         return 255;
     }

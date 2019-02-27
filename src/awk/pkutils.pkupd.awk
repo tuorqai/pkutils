@@ -42,7 +42,7 @@ function pkupd_read_checksums(repo,    m, file) {
     close(repo["checksums_txt"]);
 }
 
-function pkupd_sync_repo(repo,    index_txt, failed) {
+function pkupd_sync_repo(repo, options,    index_txt, failed) {
     # quite dirty, but gotta somehow handle official repo's layout
     if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
         repo["url_path"] = repo["url_path"] "/" repo["name"];
@@ -61,7 +61,8 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
 
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
-                         sprintf("%s/CHECKSUMS.md5", repo["dir"]));
+                         sprintf("%s/CHECKSUMS.md5", repo["dir"]),
+                         options);
     
     repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
     pkupd_read_checksums(repo);
@@ -69,11 +70,13 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
                          sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
-                         repo["checksums"]["CHECKSUMS.md5.asc"]);
+                         repo["checksums"]["CHECKSUMS.md5.asc"],
+                         options);
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/%s", repo["url_path"], index_txt),
                          sprintf("%s/%s", repo["dir"], index_txt),
-                         repo["checksums"][index_txt]);
+                         repo["checksums"][index_txt],
+                         options);
     repo["index_txt"] = sprintf("%s/%s", repo["dir"], index_txt);
 
     if (failed > 0) {
@@ -85,9 +88,9 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
     return 1;
 }
 
-function pkupd_sync_repos(repos, total_repos,    i) {
+function pkupd_sync_repos(repos, total_repos, options,    i) {
     for (i = total_repos; i >= 1; i--) {
-        if (!pkupd_sync_repo(repos[i])) {
+        if (!pkupd_sync_repo(repos[i], options)) {
             printf "Error: failed to synchronize \"%s\" repo!\n", repos[i]["name"] > "/dev/stderr";
             delete repos[i];
             return 0;
@@ -215,8 +218,10 @@ function pkupd_main(    options, dirs, repos, total_repos, packages, total_packa
         }
     }
 
+    pk_parse_options(dirs, options);
+
     total_repos = pk_parse_repos_list(dirs, repos);
-    pkupd_sync_repos(repos, total_repos);
+    pkupd_sync_repos(repos, total_repos, options);
     total_packages = pkupd_make_package_list(repos, total_repos, packages);
     pkupd_write_package_list(dirs["lib"] "/index.dat", packages, total_packages);
 }

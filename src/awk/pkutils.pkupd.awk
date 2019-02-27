@@ -92,11 +92,10 @@ function pkupd_sync_repos(repos, total_repos, options,    i) {
     for (i = total_repos; i >= 1; i--) {
         if (!pkupd_sync_repo(repos[i], options)) {
             printf "Error: failed to synchronize \"%s\" repo!\n", repos[i]["name"] > "/dev/stderr";
-            delete repos[i];
-            return 0;
+            repos[i]["failed"] = 1;
         }
     }
-    return 1;
+    return;
 }
 
 function pkupd_index_repo(repo, packages, total,    file, m) {
@@ -207,7 +206,7 @@ function pkupd_index_repo(repo, packages, total,    file, m) {
 
 function pkupd_make_package_list(repos, total_repos, packages,    i, total) {
     for (i = total_repos; i >= 1; i--) {
-        if (!(i in repos)) {
+        if (repos[i]["failed"]) {
             continue;
         }
         total = pkupd_index_repo(repos[i], packages, total);
@@ -256,6 +255,14 @@ function pkupd_main(    options, dirs, repos, total_repos, packages, total_packa
     total_repos = pk_parse_repos_list(dirs, repos);
     pkupd_sync_repos(repos, total_repos, options);
     total_packages = pkupd_make_package_list(repos, total_repos, packages);
+    if (!total_packages) {
+        printf "*\n"
+        printf "* It looks like all repositories failed to synchronize.\n";
+        printf "* Check your network connection.\n";
+        printf "*\n";
+        return 255;
+    }
+
     pkupd_write_package_list(dirs["lib"] "/index.dat", packages, total_packages);
 }
 

@@ -16,7 +16,7 @@ function pk_query(results, query, db, strict, action,    i, total, stash) {
         {
             if (action) {
                 # `action' means that we have to return only one
-                # version of a package
+                # version (one that have highest priority) of a package
                 if ($4 in stash) {
                     continue;
                 }

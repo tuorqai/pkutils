@@ -32,58 +32,41 @@ function pkque_parse_arguments(argc, argv, options, query,    i, m) {
     return 1;
 }
 
-function pkque_print_package(pk, installed,    status) {
-    status = pk_is_installed(pk, installed);
-
-    if (status == 1) {
-        status = "installed";
-    } else if (status == 2) {
-        status = "different version installed";
-    }
-
-    if (status) {
-        printf "\n%s:%s/%s %s-%s-%s%s [%s]\n  %s\n",
-            pk["repo_id"], pk["series"], pk["name"],
-            pk["version"], pk["arch"], pk["build"], pk["tag"],
-            status, pk["description"];
-    } else {
-        printf "\n%s:%s/%s %s-%s-%s%s\n  %s\n",
-            pk["repo_id"], pk["series"], pk["name"],
-            pk["version"], pk["arch"], pk["build"], pk["tag"],
-            pk["description"];
-    }
+function pkque_print_package(pk) {
+    printf "\n%s:%s/%s %s-%s-%s%s\n  %s\n",
+        pk["repo_id"], pk["series"], pk["name"],
+        pk["version"], pk["arch"], pk["build"], pk["tag"],
+        pk["description"];
 }
 
-function pkque_query(results, query, dirs, options) {
-    return pk_query(results, query, dirs["lib"] "/index.dat", options["strict"], 0);
+function pkque_query(_results, query, db, dirs, options) {
+    return pk_query2(_results, query, db, options["strict"], 0);
 }
 
-function pkque_main(    i, dirs, options, query, packages, total_results, installed) {
+function pkque_main(    i, dirs, options, query, packages, db) {
     if (!pkque_parse_arguments(ARGC, ARGV, options, query)) {
         return 1;
     }
 
     pk_setup_dirs(dirs, options["root"]);
-
     if (!pk_check_dirs(dirs)) {
         printf "Run `pkupd' first.\n";
         return 0;
     }
 
-    total_results = pkque_query(packages, query, dirs, options);
-    if (total_results < 1) {
+    pk_make_database(db, dirs);
+    pkque_query(packages, query, db, dirs, options);
+    if (packages["length"] < 1) {
         printf "No packages found.\n";
         return 0;
     }
 
-    pk_get_installed_packages(dirs, installed);
-
-    for (i = 1; i <= total_results; i++) {
-        pkque_print_package(packages[i], installed);
+    for (i = 1; i <= packages["length"]; i++) {
+        pkque_print_package(packages[i]);
     }
 
-    if (total_results > 3) {
-        printf "\nTotal packages found: %d.\n", total_results;
+    if (packages["length"] > 5) {
+        printf "\nTotal packages found: %d.\n", packages["length"];
     }
 
     printf "\n";

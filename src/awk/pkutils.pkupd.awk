@@ -62,7 +62,7 @@ function pkupd_sync_repo(repo, options,    index_txt, failed) {
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
                          sprintf("%s/CHECKSUMS.md5", repo["dir"]),
-                         options);
+                         0, options);
     
     repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
     pkupd_read_checksums(repo);

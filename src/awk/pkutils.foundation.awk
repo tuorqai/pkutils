@@ -44,6 +44,8 @@ function pk_parse_options(dirs, _options,    file, line, m) {
             if (m[1] in _options) {
                 continue;
             }
+            if (m[2] == "yes")     m[2] = 1;
+            if (m[2] == "no")      m[2] = 0;
             _options[m[1]] = m[2];
         } else {
             printf "warning: failed to parse %s in line %d: %s\n", file, line, $0;

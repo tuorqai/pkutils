@@ -86,28 +86,24 @@ function pkadd_elist_prompt(elist,    i) {
     }
 }
 
-function pkadd_elist_fetch_all(elist,    errors, i) {
+function pkadd_elist_fetch_all(elist, options,    errors, i) {
     for (i = 1; i <= elist["count"]; i++) {
         errors += pk_fetch_file(elist["packages"][i]["url_scheme"],
                                 elist["packages"][i]["url_host"],
                                 elist["packages"][i]["url_path"],
                                 elist["packages"][i]["file"],
-                                elist["packages"][i]["checksum"]);
+                                elist["packages"][i]["checksum"],
+                                options);
     }
 
     return errors;
 }
 
 function pkadd_fetch(elistr, elisti, elistu, options,    errors) {
-    if (options["dryrun"]) {
-        printf "Dry run - do not download anything.\n";
-        return 1;
-    }
-
     while (1) {
-        errors += pkadd_elist_fetch_all(elistr);
-        errors += pkadd_elist_fetch_all(elisti);
-        errors += pkadd_elist_fetch_all(elistu);
+        errors += pkadd_elist_fetch_all(elistr, options);
+        errors += pkadd_elist_fetch_all(elisti, options);
+        errors += pkadd_elist_fetch_all(elistu, options);
 
         if (!errors) {
             printf "All packages downloaded successfully.\n";
@@ -157,6 +153,8 @@ function pkadd_main(    i, j, options, query, packages, total_packages, installe
         printf "Run `pkupd' first!\n";
         return 1;
     }
+
+    pk_parse_options(dirs, options);
 
     total_packages = pkadd_query(packages, query);
     if (total_packages <= 0) {

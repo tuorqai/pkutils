@@ -26,6 +26,32 @@ function pk_check_dirs(dirs) {
     return 1;
 }
 
+function pk_parse_options(dirs, _options,    file, line, m) {
+    file = dirs["etc"] "/pkutils.conf";
+
+    while ((getline < file) > 0) {
+        line++;
+        if ($0 ~ /^(#|[[:space:]]*$)/) {
+            continue;
+        } else if ($0 ~ /^[a-z_]+\s*=\s*'.*'$/) {
+            match($0, /^([a-z_]+)\s*=\s*'(.*)'$/, m);
+            if (m[1] in _options) {
+                continue;
+            }
+            _options[m[1]] = m[2];
+        } else if ($0 ~ /^[a-z_]+\s*=\s*[^=]+$/) {
+            match($0, /^([a-z_]+)\s*=\s*([^=]+)$/, m);
+            if (m[1] in _options) {
+                continue;
+            }
+            _options[m[1]] = m[2];
+        } else {
+            printf "warning: failed to parse %s in line %d: %s\n", file, line, $0;
+        }
+    }
+    close(file);
+}
+
 function pk_get_installed_packages(dirs, _installed,    cmd, total, m) {
     cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\"", dirs["root"]);
     while ((cmd | getline) > 0) {
@@ -98,7 +124,7 @@ function __pk_check_md5sum(file, md5sum,    cmd) {
 #
 # Return 1 on failure, 0 on success
 #
-function pk_fetch_file(scheme, host, path, output, md5sum,    cmd) {
+function pk_fetch_file(scheme, host, path, output, md5sum, options,    cmd) {
     if (md5sum > 0 && __pk_check_md5sum(output, md5sum)) {
         printf "File %s is downloaded already.\n", output;
         return 0;
@@ -114,7 +140,11 @@ function pk_fetch_file(scheme, host, path, output, md5sum,    cmd) {
             printf "\n";
         }
 
-        cmd = sprintf("/usr/bin/wget --quiet --show-progress -O %s %s://%s/%s", output, scheme, host, path);
+        cmd = sprintf("/usr/bin/wget %s -O %s %s://%s/%s", options["wget_args"], output, scheme, host, path);
+        if (options["dryrun"]) {
+            printf ">> %s\n", cmd;
+            return 0;
+        }
         if (system(cmd) > 0) {
             printf "Failed to download %s://%s/%s!\n", scheme, host, path > "/dev/stderr";
             return 1;
@@ -127,11 +157,15 @@ function pk_fetch_file(scheme, host, path, output, md5sum,    cmd) {
 
         printf "Linking /%s to %s... ", path, output;
         cmd = sprintf("ln -sf /%s %s", path, output);
+        if (options["dryrun"]) {
+            printf ">> %s\n", cmd;
+            return 0;
+        }
         if (system(cmd) > 0) {
             printf "Failed!\n";
             return 1;
         }
-        printf "\n";
+        printf "Done!\n";
     } else {
         printf "Internal error: Bad URL scheme \"%s\"!\n", scheme > "/dev/stderr";
         return 1;

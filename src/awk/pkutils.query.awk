@@ -2,10 +2,11 @@
 function pk_query(results, query, db, strict, action,    i, total, stash) {
     FS = ":"; RS = "\n";
 
-    if (strict) {
-        for (i in query) {
+    for (i in query) {
+        if (strict) {
             query[i] = "^" query[i] "$";
         }
+        sub(/\+/, "\\+", query[i]);
     }
 
     while ((getline < db) > 0) {
@@ -36,6 +37,9 @@ function pk_query(results, query, db, strict, action,    i, total, stash) {
             results[total]["type"]        = $9;
             results[total]["checksum"]    = $10;
             results[total]["description"] = $11;
+            results[total]["required"]    = $12;
+            results[total]["conflicts"]   = $13;
+            results[total]["suggests"]    = $14;
         }
     }
 

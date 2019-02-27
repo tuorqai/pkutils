@@ -108,23 +108,43 @@ function pkupd_index_repo(repo, packages, total,    file, m) {
     while ((getline < repo["index_txt"]) > 0) {
         if ($0 ~ /^PACKAGE\s+/) {
             for (i = 1; i < NF; i++) {
-                if ($i ~ /^PACKAGE NAME:\s+.*/) {
+                if ($i ~ /^PACKAGE NAME:\s+.*/)
+                {
                     sub(/PACKAGE NAME:\s+/, "", $i);
                     match($i, /(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)\.(t[bglx]z)/, m);
 
-                    package["name"] = m[1];
-                    package["version"] = m[2];
-                    package["arch"] = m[3];
-                    package["build"] = m[4];
-                    package["tag"] = m[5];
-                    package["type"] = m[6];
-                } else if ($i ~ /^PACKAGE LOCATION:\s+.*/) {
+                    package["name"]     = m[1];
+                    package["version"]  = m[2];
+                    package["arch"]     = m[3];
+                    package["build"]    = m[4];
+                    package["tag"]      = m[5];
+                    package["type"]     = m[6];
+                }
+                else if ($i ~ /^PACKAGE LOCATION:\s+.*/)
+                {
                     sub(/PACKAGE LOCATION:\s+(\.\/)?/, "", $i);
                     match($i, /([^\/]*$)/, m);
 
                     package["location"] = $i;
-                    package["series"] = m[1];
-                } else if ($i ~ "^" package["name"] ": " package["name"] " \\(.+\\)$") {
+                    package["series"]   = m[1];
+                }
+                else if ($i ~ /^PACKAGE REQUIRED:\s+.*/)
+                {
+                    sub(/PACKAGE REQUIRED:\s+/, "", $i);
+                    package["required"] = $i;
+                }
+                else if ($i ~ /^PACKAGE CONFLICTS:\s+.*/)
+                {
+                    sub(/PACKAGE CONFLICTS:\s+/, "", $i);
+                    package["conflicts"] = $i;
+                }
+                else if ($i ~ /^PACKAGE SUGGESTS:\s+.*/)
+                {
+                    sub(/PACKAGE SUGGESTS:\s+/, "", $i);
+                    package["suggests"] = $i;
+                }
+                else if ($i ~ "^" package["name"] ": " package["name"] " \\(.+\\)$")
+                {
                     match($i, "^" package["name"] ": " package["name"] " \\((.+)\\)$", m);
 
                     package["description"] = m[1];
@@ -174,6 +194,9 @@ function pkupd_index_repo(repo, packages, total,    file, m) {
         packages[total]["type"]         = package["type"];
         packages[total]["checksum"]     = package["checksum"];
         packages[total]["description"]  = package["description"];
+        packages[total]["required"]     = package["required"];
+        packages[total]["conflicts"]    = package["conflicts"];
+        packages[total]["suggests"]     = package["suggests"];
 
         delete package["description"];
     }
@@ -197,10 +220,20 @@ function pkupd_write_package_list(db, packages, total_packages,    i) {
     printf "" > db;
 
     for (i = 1; i <= total_packages; i++) {
-        print packages[i]["repo_id"], packages[i]["location"], packages[i]["series"], \
-            packages[i]["name"], packages[i]["version"], packages[i]["arch"], \
-            packages[i]["build"], packages[i]["tag"], packages[i]["type"], \
-            packages[i]["checksum"], packages[i]["description"] >> db;
+        print   packages[i]["repo_id"],     \
+                packages[i]["location"],    \
+                packages[i]["series"],      \
+                packages[i]["name"],        \
+                packages[i]["version"],     \
+                packages[i]["arch"],        \
+                packages[i]["build"],       \
+                packages[i]["tag"],         \
+                packages[i]["type"],        \
+                packages[i]["checksum"],    \
+                packages[i]["description"], \
+                packages[i]["required"],    \
+                packages[i]["conflicts"],   \
+                packages[i]["suggests"] >> db;
     }
 }
 

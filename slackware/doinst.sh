@@ -14,3 +14,4 @@ config() {
 
 config etc/pkutils/repos.list.new
 config etc/pkutils/lock.list.new
+config etc/pkutils/pkutils.conf.new

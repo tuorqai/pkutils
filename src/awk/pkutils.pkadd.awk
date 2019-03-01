@@ -73,7 +73,7 @@ function fetch_sources(pk, tar,    i, failed, total, sources, checksums, m) {
     return 0;
 }
 
-function fetch_package(pk, tar,    i, r) {
+function fetch_package(pk, tar, output,    i, r, pk_url_path) {
     for (i = 1; i <= REPOS["length"]; i++) {
         if (REPOS[i]["name"] == pk["repo_id"]) {
             r = i;
@@ -91,16 +91,17 @@ function fetch_package(pk, tar,    i, r) {
     }
 
     pk_url_path = sprintf("%s/%s/%s", REPOS[r]["url_path"], pk["location"], tar);
-    pk_output = sprintf("%s/%s", REPOS[r]["cache"], tar);
+    __fetch_package_output = sprintf("%s/%s", REPOS[r]["cache"], tar);
 
     return pk_fetch_file(REPOS[r]["url_scheme"], REPOS[r]["url_host"],
-        pk_url_path, pk_output, pk["checksum"]);
+        pk_url_path, __fetch_package_output, pk["checksum"]);
 }
 
-function elist_fetch(self,    i, p, failed) {
+function elist_fetch(self,    i, p, output, failed) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
         failed += fetch_package(DB[p], self[i, "tar"]);
+        self[i, "cache"] = __fetch_package_output;
     }
     return failed;
 }
@@ -122,11 +123,11 @@ function elist_process(self,    i, p) {
         }
 
         if (OPTIONS["dryrun"]) {
-            printf ">> %s %s\n", self["command"], self[i, "tar"];
+            printf ">> %s %s\n", self["command"], self[i, "cache"];
             continue;
         }
 
-        system(self["command"] " " self[i, "tar"]);
+        system(self["command"] " " self[i, "cache"]);
     }
 }
 

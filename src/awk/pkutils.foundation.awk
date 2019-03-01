@@ -124,7 +124,7 @@ function pk_make_symlink(dest, src, dry_run,    cmd) {
     printf "Done.\n";
 }
 
-function pk_fetch_remote(output, remote, dry_run, args,    cmd) {
+function pk_fetch_remote(output, remote,    cmd) {
     if (system("test -L " output) == 0) {
         printf "Found symbolic link %s. Removing... ", output;
         if (system("rm -rf " output) > 0) {
@@ -134,8 +134,8 @@ function pk_fetch_remote(output, remote, dry_run, args,    cmd) {
         printf "Done.\n";
     }
 
-    cmd = sprintf("/usr/bin/wget %s -O %s %s", args, output, remote);
-    if (dry_run) {
+    cmd = sprintf("/usr/bin/wget %s -O %s %s", OPTIONS["wget_args"], output, remote);
+    if (OPTIONS["dryrun"]) {
         printf ">> %s\n", cmd;
         return 0;
     }
@@ -152,9 +152,7 @@ function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
     }
 
     if (scheme ~ /https?|ftp/) {
-        failed = pk_fetch_remote(output,
-            sprintf("%s://%s/%s", scheme, host, path),
-            OPTIONS["dryrun"], OPTIONS["wget_args"]);
+        failed = pk_fetch_remote(output, sprintf("%s://%s/%s", scheme, host, path));
         if (failed) {
             return 1;
         }

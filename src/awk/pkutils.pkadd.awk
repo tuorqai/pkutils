@@ -140,6 +140,7 @@ function pkadd_main(    queries, results, er, eu, ei) {
 
     for (i = 1; i <= results["length"]; i++) {
         printf "Calculating dependencies for %s...\n", db_get_full_name(DB[results[i]]);
+        delete dlist;
         make_dependency_list(results[i], dlist);
         printf "Done!\n";
         for (j = 1; j <= dlist["length"]; j++) {

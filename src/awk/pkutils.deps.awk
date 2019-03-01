@@ -102,6 +102,7 @@ function make_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
 
     k = ++dlist["length"];
     dlist[k] = p;
+    dlist[k, "level"] = dqueue["length"] - 1;
 
     dqueue_pop(dqueue);
 }

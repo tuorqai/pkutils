@@ -3,7 +3,7 @@
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
 
-function pkadd_parse_arguments(queries,    i, m) {
+function parse_arguments(queries,    i, m) {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^-[^=]+$/) {
             if (ARGV[i] ~ /^(-u|--upgrade)$/) {
@@ -39,26 +39,7 @@ function pkadd_parse_arguments(queries,    i, m) {
     return 1;
 }
 
-function pkadd_elist_process(elist,    i) {
-    if (elist["count"] == 0) {
-        return;
-    }
-
-    if (OPTIONS["root"]) {
-        elist["command"] = sprintf("%s --root %s", elist["command"], OPTIONS["root"]);
-    }
-
-    for (i = 1; i <= elist["count"]; i++) {
-        if (OPTIONS["dryrun"]) {
-            printf ">> %s %s\n", elist["command"], elist["packages"][i]["file"];
-            continue;
-        }
-
-        system(elist["command"] " " elist["packages"][i]["file"]);
-    }
-}
-
-function elist_add_package(self, p,    k) {
+function elist_add_package(self, p, op,    k) {
     for (k = 1; k <= self["length"]; k++) {
         if (self[k] == p) {
             return;
@@ -68,18 +49,28 @@ function elist_add_package(self, p,    k) {
     k = ++self["length"];
     self[k] = p;
     self[k, "tar"] = db_get_tar_name(DB[p]);
-    self[k, "hint"] = "N/A";
+    if (op) {
+        self[k, "hint"] = db_get_signature(DB[op]) " -> " db_get_signature(DB[p]);
+    } else {
+        self[k, "hint"] = db_get_signature(DB[p]);
+    }
 }
 
-function elist_prompt(self,    i) {
+function elist_prompt(self,    i, p) {
     if (self["length"] == 0) {
         return;
     }
 
     printf "\n%d package(s) will be %s:\n", self["length"], self["action"];
     for (i = 1; i <= self["length"]; i++) {
-        printf "-- %s (%s)\n", DB[self[i]]["name"], self[i, "hint"];
+        p = self[i];
+        printf "-- %s (%s)\n", DB[p]["name"], self[i, "hint"];
     }
+}
+
+function fetch_sources(pk, tar,    i, failed, total, sources, checksums, m) {
+    printf ">> TODO: FETCH %s SOURCES!\n", pk["name"];
+    return 0;
 }
 
 function fetch_package(pk, tar,    i, r) {
@@ -93,6 +84,10 @@ function fetch_package(pk, tar,    i, r) {
     if (!r) {
         printf "Error: no repo %s\n", pk["repo_id"] > "/dev/stderr";
         return 1;
+    }
+
+    if (pk["type"] == "SlackBuild") {
+        return fetch_sources(pk, tar);
     }
 
     pk_url_path = sprintf("%s/%s/%s", REPOS[r]["url_path"], pk["location"], tar);
@@ -110,8 +105,33 @@ function elist_fetch(self,    i, p, failed) {
     return failed;
 }
 
+function elist_process(self,    i, p) {
+    if (self["length"] == 0) {
+        return;
+    }
+
+    if (OPTIONS["root"]) {
+        self["command"] = sprintf("%s --root %s", self["command"], OPTIONS["root"]);
+    }
+
+    for (i = 1; i <= self["length"]; i++) {
+        p = self[i];
+        if (DB[p]["type"] == "SlackBuild") {
+            printf ">> TODO: BUILD %s!\n", DB[p]["name"];
+            continue;
+        }
+
+        if (OPTIONS["dryrun"]) {
+            printf ">> %s %s\n", self["command"], self[i, "tar"];
+            continue;
+        }
+
+        system(self["command"] " " self[i, "tar"]);
+    }
+}
+
 function pkadd_main(    queries, results, er, eu, ei) {
-    if (!pkadd_parse_arguments(queries)) {
+    if (!parse_arguments(queries)) {
         return 255;
     }
 
@@ -135,8 +155,11 @@ function pkadd_main(    queries, results, er, eu, ei) {
     pk_parse_repos_list();
 
     er["action"] = "REINSTALLED";
+    er["command"] = "upgradepkg --reinstall";
     eu["action"] = "UPGRADED";
+    eu["command"] = "upgradepkg";
     ei["action"] = "INSTALLED";
+    ei["command"] = "installpkg";
 
     for (i = 1; i <= results["length"]; i++) {
         printf "Calculating dependencies for %s...\n", db_get_full_name(DB[results[i]]);
@@ -153,7 +176,7 @@ function pkadd_main(    queries, results, er, eu, ei) {
                     printf "Package %s (%s) installed already.\n", DB[p]["name"], DB[p]["version"];
                 }
             } else if (status > 65535) {
-                elist_add_package(eu, status - 65535);
+                elist_add_package(eu, p, status - 65535);
             } else {
                 if (!OPTIONS["upgrade"]) {
                     elist_add_package(ei, p);
@@ -188,6 +211,10 @@ function pkadd_main(    queries, results, er, eu, ei) {
     if (OPTIONS["fetch_only"]) {
         return 0;
     }
+
+    elist_process(er);
+    elist_process(eu);
+    elist_process(ei);
 
     return 0;
 }

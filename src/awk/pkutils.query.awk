@@ -47,6 +47,9 @@ function db_get_full_name(pk) {
 # dlea packeta s t?z-rasxireniem.
 # --------------------------------
 function db_get_tar_name(pk) {
+    if (pk["type"] == "SlackBuild") {
+        return sprintf("%s.tar.gz", pk["name"]);
+    }
     return sprintf("%s.%s", db_get_full_name(pk), pk["type"]);
 }
 
@@ -72,6 +75,10 @@ function db_rebuild(    m, cmd, index_dat, total) {
         DB[total]["required"]    = $12;
         DB[total]["conflicts"]   = $13;
         DB[total]["suggests"]    = $14;
+        DB[total]["src_download"] = $15;
+        DB[total]["src_download_x86_64"] = $16;
+        DB[total]["src_checksum"] = $17;
+        DB[total]["src_checksum_x86_64"] = $18;
     }
     close(index_dat);
 

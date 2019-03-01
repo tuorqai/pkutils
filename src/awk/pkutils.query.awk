@@ -1,135 +1,190 @@
 
-function pk_make_database(_db, dirs,    m, cmd, index_dat, total) {
-    index_dat = dirs["lib"] "/index.dat";
+# --------------------------------
+# -- pk_get_package_id_by_name
+# Get package index in DB by it's name
+# Polucith index packeta po ego nazvanyu
+# --------------------------------
+function db_get_by_name(name,    i, j, k, cases) {
+    k = split(name, cases, /\|/);
+    for (i = 1; i <= DB["length"]; i++) {
+        for (j = 1; j <= k; j++) {
+            if (DB[i]["name"] == cases[j]) {
+                return i;
+            }
+        }
+    }
+    return 0;
+}
+
+# --------------------------------
+# -- db_get_signature
+# Vozvrasceaet signaturu packeta,
+# to esth strocu vida `1.0.0-i586-1_slack14.2'
+# --------------------------------
+function db_get_signature(pk) {
+    if (pk["type"] == "SlackBuild") {
+        return pk["version"];
+    }
+    return sprintf("%s-%s-%d%s",
+        pk["version"],
+        pk["arch"],
+        pk["build"],
+        pk["tag"]);
+}
+
+# --------------------------------
+# -- db_get_signature
+# Vozvrasceaet polnoe imea packeta,
+# to esth `imea-signatura'.
+# --------------------------------
+function db_get_full_name(pk) {
+    return sprintf("%s-%s", pk["name"], db_get_signature(pk));
+}
+
+# --------------------------------
+# -- db_get_tar_name
+# Vozvrasceaet nazvanie sobstvenno faila
+# dlea packeta s t?z-rasxireniem.
+# --------------------------------
+function db_get_tar_name(pk) {
+    return sprintf("%s.%s", db_get_full_name(pk), pk["type"]);
+}
+
+# --------------------------------
+# -- db_rebuild
+# --------------------------------
+function db_rebuild(    m, cmd, index_dat, total) {
+    index_dat = DIRS["lib"] "/index.dat";
     FS = ":"; RS = "\n";
     while ((getline < index_dat) > 0) {
         total++;
-        _db[total]["repo_id"]     = $1;
-        _db[total]["location"]    = $2;
-        _db[total]["series"]      = $3;
-        _db[total]["name"]        = $4;
-        _db[total]["version"]     = $5;
-        _db[total]["arch"]        = $6;
-        _db[total]["build"]       = $7;
-        _db[total]["tag"]         = $8;
-        _db[total]["type"]        = $9;
-        _db[total]["checksum"]    = $10;
-        _db[total]["description"] = $11;
-        _db[total]["required"]    = $12;
-        _db[total]["conflicts"]   = $13;
-        _db[total]["suggests"]    = $14;
+        DB[total]["repo_id"]     = $1;
+        DB[total]["location"]    = $2;
+        DB[total]["series"]      = $3;
+        DB[total]["name"]        = $4;
+        DB[total]["version"]     = $5;
+        DB[total]["arch"]        = $6;
+        DB[total]["build"]       = $7;
+        DB[total]["tag"]         = $8;
+        DB[total]["type"]        = $9;
+        DB[total]["checksum"]    = $10;
+        DB[total]["description"] = $11;
+        DB[total]["required"]    = $12;
+        DB[total]["conflicts"]   = $13;
+        DB[total]["suggests"]    = $14;
     }
     close(index_dat);
 
-    cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\"", dirs["root"]);
+    DB["first_local"] = total + 1;
+
+    cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\" 2> /dev/null", DIRS["root"]);
     while ((cmd | getline) > 0) {
         match($0, /^(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)$/, m);
         total++;
-        _db[total]["repo_id"]     = "local";
-        _db[total]["series"]      = "unknown";
-        _db[total]["name"]        = m[1];
-        _db[total]["version"]     = m[2];
-        _db[total]["arch"]        = m[3];
-        _db[total]["build"]       = m[4];
-        _db[total]["tag"]         = m[5];
-        _db[total]["description"] = "(description not available)";
+        DB[total]["repo_id"]     = "local";
+        DB[total]["series"]      = "unknown";
+        DB[total]["name"]        = m[1];
+        DB[total]["version"]     = m[2];
+        DB[total]["arch"]        = m[3];
+        DB[total]["build"]       = m[4];
+        DB[total]["tag"]         = m[5];
+        DB[total]["description"] = "(description not available)";
     }
     close(cmd);
 
-    _db["length"] = total;
+    DB["length"] = total;
+}
+# --------------------------------
+# -- perform_query
+# --------------------------------
+function perform_query(results, query, strong,    i, j, p, f, m) {
+    match(query,
+        /^([^\~=@\/]*)\~?([^\~=@\/]*)=?([^\~=@\/]*)@?([^\~=@\/]*)\/?([^\~=@\/]*)/, m);
+
+    for (i = 1; i <= 5; i++) {
+        if (m[i] == "") {
+            m[i] = ".*";
+        }
+        if (strong || i > 1) {
+            m[i] = "^" m[i] "$";
+        }
+    }
+
+    for (i = 1; i <= DB["length"]; i++) {
+        if ((DB[i]["name"] ~ m[1]) && (DB[i]["arch"] ~ m[2]) &&
+            (DB[i]["version"] ~ m[3]) && (DB[i]["repo_id"] ~ m[4]) &&
+            (DB[i]["series"] ~ m[5]))
+        {
+            if (strong) {
+                for (j = 1; j <= results["length"]; j++) {
+                    p = results[j];
+                    if (DB[p]["name"] == DB[i]["name"]) {
+                        # ispolhzuem flag, t.c. net vozmoghnosti
+                        # normalhno vhyti iz vlogennogo cycla
+                        f = 65535;
+                    }
+                }
+                if (f == 65535) {
+                    break;
+                }
+            }
+            results[++results["length"]] = i;
+        }
+    }
 }
 
-function pk_query2(_results, query, db, strict, action,    i, stash, total) {
-    for (i in query) {
-        if (strict) {
-            query[i] = "^" query[i] "$";
-        }
-        sub(/\+/, "\\+", query[i]);
+# --------------------------------
+# -- db_query
+# --------------------------------
+function db_query(results, queries,    i) {
+    for (i = 1; i <= queries["length"]; i++) {
+        perform_query(results, queries[i], 1);
     }
-
-    for (i = 1; i <= db["length"]; i++) {
-        if ((db[i]["repo_id"] ~ query["repo_id"]) &&
-            (db[i]["series"] ~ query["series"]) &&
-            (db[i]["name"] ~ query["name"]) &&
-            (db[i]["version"] ~ query["version"]) &&
-            (db[i]["arch"] ~ query["arch"]) &&
-            (db[i]["tag"] ~ query["tag"]) &&
-            (db[i]["description"] ~ query["desc"]))
-        {
-            if (action) {
-                # `action' means that we have to return only one
-                # version (one that have highest priority) of a package
-                if (db[i]["name"] in stash) {
-                    continue;
-                }
-                stash[db[i]["name"]] = 1;
-            }
-
-            total++;
-            _results[total]["repo_id"]     = db[i]["repo_id"];
-            _results[total]["location"]    = db[i]["location"];
-            _results[total]["series"]      = db[i]["series"];
-            _results[total]["name"]        = db[i]["name"];
-            _results[total]["version"]     = db[i]["version"];
-            _results[total]["arch"]        = db[i]["arch"];
-            _results[total]["build"]       = db[i]["build"];
-            _results[total]["tag"]         = db[i]["tag"];
-            _results[total]["type"]        = db[i]["type"];
-            _results[total]["checksum"]    = db[i]["checksum"];
-            _results[total]["description"] = db[i]["description"];
-            _results[total]["required"]    = db[i]["required"];
-            _results[total]["conflicts"]   = db[i]["conflicts"];
-            _results[total]["suggests"]    = db[i]["suggests"];
-        }
-    }
-
-    _results["length"] = total;
 }
 
-function pk_query(results, query, db, strict, action,    i, total, stash) {
-    FS = ":"; RS = "\n";
-
-    for (i in query) {
-        if (strict) {
-            query[i] = "^" query[i] "$";
-        }
-        sub(/\+/, "\\+", query[i]);
+# --------------------------------
+# -- db_weak_query
+# --------------------------------
+function db_weak_query(results, queries,    i) {
+    for (i = 1; i <= queries["length"]; i++) {
+        perform_query(results, queries[i]);
     }
+}
 
-    while ((getline < db) > 0) {
-        if (($1 ~ query["repo_id"]) && ($3 ~ query["series"])  &&
-            ($4 ~ query["name"])    && ($5 ~ query["version"]) &&
-            ($6 ~ query["arch"])    && ($8 ~ query["tag"]) &&
-            ($11 ~ query["desc"]))
-        {
-            if (action) {
-                # `action' means that we have to return only one
-                # version (one that have highest priority) of a package
-                if ($4 in stash) {
-                    continue;
-                }
-
-                stash[$4] = 1;
+# --------------------------------
+# -- db_is_installed
+# Etot bratixhca provereaet, ustanovlen li
+# tot ili inoi packet. Na vxod DB i index packeta,
+# a na vhixod 1, esli packet ustanovlen localhno,
+# libo 65535 + index obnovleaemogo packeta, esli
+# ustanovlena drugaya versia, libo 0, esli nicego net.
+# --------------------------------
+# Pocemu 65535? Potomu chto mogu.
+# --------------------------------
+function db_is_installed(p,    i) {
+    for (i = DB["first_local"]; i <= DB["length"]; i++) {
+        if (DB[i]["name"] == DB[p]["name"]) {
+            if ((DB[i]["version"] == DB[p]["version"]) && (DB[i]["arch"] == DB[p]["arch"]) &&
+                (DB[i]["build"] == DB[p]["build"]) && (DB[i]["tag"] == DB[p]["tag"]))
+            {
+                return 1;
             }
-    
-            total++;
-            results[total]["repo_id"]     = $1;
-            results[total]["location"]    = $2;
-            results[total]["series"]      = $3;
-            results[total]["name"]        = $4;
-            results[total]["version"]     = $5;
-            results[total]["arch"]        = $6;
-            results[total]["build"]       = $7;
-            results[total]["tag"]         = $8;
-            results[total]["type"]        = $9;
-            results[total]["checksum"]    = $10;
-            results[total]["description"] = $11;
-            results[total]["required"]    = $12;
-            results[total]["conflicts"]   = $13;
-            results[total]["suggests"]    = $14;
+            return 65535 + i;
         }
     }
 
-    close(db);
-    return total;
+    return 0;
+}
+
+# --------------------------------
+# -- db_dump
+# --------------------------------
+function db_dump(    i, j) {
+    printf "DB size: %d packages\n", DB["length"];
+    for (i = 1; i <= DB["length"]; i++) {
+        printf "== PACKAGE #%d ==\n", i;
+        for (j in DB[i]) {
+            printf "  %s: %s\n", j, DB[i][j];
+        }
+    }
 }

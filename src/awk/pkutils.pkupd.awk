@@ -1,26 +1,27 @@
 
 @include "pkutils.foundation.awk"
+@include "pkutils.query.awk"
 
-function pkupd_parse_arguments(argc, argv, options,    i, m) {
-    for (i = 1; i < argc; i++) {
-        if (argv[i] ~ /^-[^=]+$/) {
-            if (argv[i] ~ /^(-h|-?|--help)$/) {
-                options["help"] = 1;
+function pkupd_parse_arguments(    i, m) {
+    for (i = 1; i < ARGC; i++) {
+        if (ARGV[i] ~ /^-[^=]+$/) {
+            if (ARGV[i] ~ /^(-h|-?|--help)$/) {
+                OPTIONS["help"] = 1;
             } else {
-                printf "Unrecognized option: %s\n", argv[i] >> "/dev/stderr";
+                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
                 return 0;
             }
-        } else if (argv[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(argv[i], /^([^=]+)=([^=]+)$/, m);
+        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
+            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
 
             if (m[1] ~ /^-R$|^--root$/) {
-                options["root"] = m[2];
+                OPTIONS["root"] = m[2];
             } else {
                 printf "Unrecognized option: %s\n", m[1] >> "/dev/stderr";
                 return 0;
             }
         } else {
-            printf "Unrecognized argument: %s!\n", argv[i];
+            printf "Unrecognized argument: %s!\n", ARGV[i];
             return 0;
         }
     }
@@ -42,7 +43,7 @@ function pkupd_read_checksums(repo,    m, file) {
     close(repo["checksums_txt"]);
 }
 
-function pkupd_sync_repo(repo, options,    index_txt, failed) {
+function pkupd_sync_repo(repo,    index_txt, failed) {
     # quite dirty, but gotta somehow handle official repo's layout
     if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
         repo["url_path"] = repo["url_path"] "/" repo["name"];
@@ -62,7 +63,7 @@ function pkupd_sync_repo(repo, options,    index_txt, failed) {
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
                          sprintf("%s/CHECKSUMS.md5", repo["dir"]),
-                         0, options);
+                         0);
     
     repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
     pkupd_read_checksums(repo);
@@ -70,13 +71,11 @@ function pkupd_sync_repo(repo, options,    index_txt, failed) {
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
                          sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
-                         repo["checksums"]["CHECKSUMS.md5.asc"],
-                         options);
+                         repo["checksums"]["CHECKSUMS.md5.asc"]);
     failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
                          sprintf("%s/%s", repo["url_path"], index_txt),
                          sprintf("%s/%s", repo["dir"], index_txt),
-                         repo["checksums"][index_txt],
-                         options);
+                         repo["checksums"][index_txt]);
     repo["index_txt"] = sprintf("%s/%s", repo["dir"], index_txt);
 
     if (failed > 0) {
@@ -88,17 +87,91 @@ function pkupd_sync_repo(repo, options,    index_txt, failed) {
     return 1;
 }
 
-function pkupd_sync_repos(repos, total_repos, options,    i) {
-    for (i = total_repos; i >= 1; i--) {
-        if (!pkupd_sync_repo(repos[i], options)) {
-            printf "Error: failed to synchronize \"%s\" repo!\n", repos[i]["name"] > "/dev/stderr";
-            repos[i]["failed"] = 1;
+function sync_repos(    i) {
+    for (i = REPOS["length"]; i >= 1; i--) {
+        if (!pkupd_sync_repo(REPOS[i])) {
+            printf "Error: failed to synchronize \"%s\" repo!\n", REPOS[i]["name"] > "/dev/stderr";
+            REPOS[i]["failed"] = 1;
         }
     }
     return;
 }
 
-function pkupd_index_repo(repo, packages, total,    file, m) {
+function index_binary_package(repo, pk,   i, m) {
+    for (i = 1; i < NF; i++) {
+        if ($i ~ /^PACKAGE NAME:\s+.*/) {
+            sub(/PACKAGE NAME:\s+/, "", $i);
+            match($i, /(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)\.(t[bglx]z)/, m);
+            pk["name"]     = m[1];
+            pk["version"]  = m[2];
+            pk["arch"]     = m[3];
+            pk["build"]    = m[4];
+            pk["tag"]      = m[5];
+            pk["type"]     = m[6];
+        } else if ($i ~ /^PACKAGE LOCATION:\s+.*/) {
+            sub(/PACKAGE LOCATION:\s+(\.\/)?/, "", $i);
+            match($i, /([^\/]*$)/, m);
+            pk["location"] = $i;
+            pk["series"]   = m[1];
+        } else if ($i ~ /^PACKAGE REQUIRED:\s+.*/) {
+            sub(/PACKAGE REQUIRED:\s+/, "", $i);
+            pk["required"] = $i;
+        } else if ($i ~ /^PACKAGE CONFLICTS:\s+.*/) {
+            sub(/PACKAGE CONFLICTS:\s+/, "", $i);
+            pk["conflicts"] = $i;
+        } else if ($i ~ /^PACKAGE SUGGESTS:\s+.*/) {
+            sub(/PACKAGE SUGGESTS:\s+/, "", $i);
+            pk["suggests"] = $i;
+        } else if ($i ~ "^" pk["name"] ": " pk["name"] " \\(.+\\)$") {
+            match($i, "^" pk["name"] ": " pk["name"] " \\((.+)\\)$", m);
+            pk["description"] = m[1];
+        }
+    }
+
+    pk["repo_id"] = repo["name"];
+    pk["checksum"] = repo["checksums"][db_get_tar_name(pk)];
+}
+
+function index_slackbuild(repo, pk,    i, m) {
+    for (i = 1; i < NF; i++) {
+        if ($i ~ /^SLACKBUILD NAME:\s+/) {
+            sub(/SLACKBUILD NAME:\s+/, "", $i);
+            pk["name"] = $i;
+        } else if ($i ~ /^SLACKBUILD LOCATION:\s+/) {
+            sub(/SLACKBUILD LOCATION:\s+/, "", $i);
+            pk["location"] = $i;
+        } else if ($i ~ /^SLACKBUILD VERSION:\s+/) {
+            sub(/SLACKBUILD VERSION:\s+/, "", $i);
+            pk["version"] = $i;
+        } else if ($i ~ /^SLACKBUILD DOWNLOAD:\s+/) {
+            sub(/SLACKBUILD DOWNLOAD:\s+/, "", $i);
+            pk["src_download"] = $i;
+        } else if ($i ~ /^SLACKBUILD DOWNLOAD_x86_64:\s+/) {
+            sub(/SLACKBUILD DOWNLOAD_x86_64:\s+/, "", $i);
+            pk["src_download_x86_64"] = $i;
+        } else if ($i ~ /^SLACKBUILD MD5SUM:\s+/) {
+            sub(/SLACKBUILD MD5SUM:\s+/, "", $i);
+            pk["src_checksum"] = $i;
+        } else if ($i ~ /^SLACKBUILD MD5SUM_x86_64:\s+/) {
+            sub(/SLACKBUILD MD5SUM_x86_64:\s+/, "", $i);
+            pk["src_checksum_x86_64"] = $i;
+        } else if ($i ~ /^SLACKBUILD REQUIRES:\s+/) {
+            sub(/SLACKBUILD REQUIRES:\s+/, "", $i);
+            gsub(/\s+/, ",", $i);
+            pk["required"] = $i;
+        } else if ($i ~ /^SLACKBUILD SHORT DESCRIPTION:\s+/) {
+            sub(/SLACKBUILD SHORT DESCRIPTION:\s+/, "", $i);
+            pk["description"] = $i;
+        }
+    }
+
+    pk["repo_id"] = repo["name"];
+    match(pk["location"], /.*\/([^\/]*)\/[^\/]*/, m);
+    pk["series"] = m[1];
+    pk["type"] = "SlackBuild";
+}
+
+function index_repo(repo, packages,    file, m) {
     FS = "\n"; RS = "";
     OFS = ":"; ORS = "\n";
 
@@ -106,156 +179,75 @@ function pkupd_index_repo(repo, packages, total,    file, m) {
 
     while ((getline < repo["index_txt"]) > 0) {
         if ($0 ~ /^PACKAGE\s+/) {
-            for (i = 1; i < NF; i++) {
-                if ($i ~ /^PACKAGE NAME:\s+.*/)
-                {
-                    sub(/PACKAGE NAME:\s+/, "", $i);
-                    match($i, /(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)\.(t[bglx]z)/, m);
-
-                    package["name"]     = m[1];
-                    package["version"]  = m[2];
-                    package["arch"]     = m[3];
-                    package["build"]    = m[4];
-                    package["tag"]      = m[5];
-                    package["type"]     = m[6];
-                }
-                else if ($i ~ /^PACKAGE LOCATION:\s+.*/)
-                {
-                    sub(/PACKAGE LOCATION:\s+(\.\/)?/, "", $i);
-                    match($i, /([^\/]*$)/, m);
-
-                    package["location"] = $i;
-                    package["series"]   = m[1];
-                }
-                else if ($i ~ /^PACKAGE REQUIRED:\s+.*/)
-                {
-                    sub(/PACKAGE REQUIRED:\s+/, "", $i);
-                    package["required"] = $i;
-                }
-                else if ($i ~ /^PACKAGE CONFLICTS:\s+.*/)
-                {
-                    sub(/PACKAGE CONFLICTS:\s+/, "", $i);
-                    package["conflicts"] = $i;
-                }
-                else if ($i ~ /^PACKAGE SUGGESTS:\s+.*/)
-                {
-                    sub(/PACKAGE SUGGESTS:\s+/, "", $i);
-                    package["suggests"] = $i;
-                }
-                else if ($i ~ "^" package["name"] ": " package["name"] " \\(.+\\)$")
-                {
-                    match($i, "^" package["name"] ": " package["name"] " \\((.+)\\)$", m);
-
-                    package["description"] = m[1];
-                }
-            }
-            file = sprintf("%s-%s-%s-%s%s.%s",
-                package["name"], package["version"], package["arch"],
-                package["build"], package["tag"], package["type"]);
-            package["checksum"] = repo["checksums"][file];
+            k = ++DB["length"];
+            DB[k][0] = 0; # specialhnhy hack po pricine otsutstvia privedenia typof
+            index_binary_package(repo, DB[k]);
+            delete DB[k][0];
         } else if ($0 ~ /^SLACKBUILD\s+/) {
-            for (i = 1; i < NF; i++) {
-                if ($i ~ /^SLACKBUILD NAME:\s+/) {
-                    sub(/SLACKBUILD NAME:\s+/, "", $i);
-                    package["name"] = $i;
-                } else if ($i ~ /^SLACKBUILD LOCATION:\s+/) {
-                    sub(/SLACKBUILD LOCATION:\s+/, "", $i);
-                    package["location"] = $i;
-                } else if ($i ~ /^SLACKBUILD VERSION:\s+/) {
-                    sub(/SLACKBUILD VERSION:\s+/, "", $i);
-                    package["version"] = $i;
-                }
-            }
-            
-            match(package["location"], /.*\/([^\/]*)\/[^\/]*/, m);
-            package["series"] = m[1];
-            package["arch"] = "source";
-            package["build"] = 0;
-            package["type"] = "SlackBuild";
-            package["checksum"] = 0;
+            k = ++DB["length"];
+            DB[k][0] = 0;
+            index_slackbuild(repo, DB[k]);
+            delete DB[k][0];
         } else {
             continue;
         }
-
-        if (!package["description"]) {
-            package["description"] = "(no description)";
-        }
-        
-        total++;
-        packages[total]["repo_id"]      = repo["name"];
-        packages[total]["location"]     = package["location"];
-        packages[total]["series"]       = package["series"];
-        packages[total]["name"]         = package["name"];
-        packages[total]["version"]      = package["version"];
-        packages[total]["arch"]         = package["arch"];
-        packages[total]["build"]        = package["build"];
-        packages[total]["tag"]          = package["tag"];
-        packages[total]["type"]         = package["type"];
-        packages[total]["checksum"]     = package["checksum"];
-        packages[total]["description"]  = package["description"];
-        packages[total]["required"]     = package["required"];
-        packages[total]["conflicts"]    = package["conflicts"];
-        packages[total]["suggests"]     = package["suggests"];
-
-        delete package["description"];
     }
     close(repo["index_txt"]);
-
-    return total;
 }
 
-function pkupd_make_package_list(repos, total_repos, packages,    i, total) {
-    for (i = total_repos; i >= 1; i--) {
-        if (repos[i]["failed"]) {
+function db_build(    i) {
+    for (i = REPOS["length"]; i >= 1; i--) {
+        if (REPOS[i]["failed"]) {
             continue;
         }
-        total = pkupd_index_repo(repos[i], packages, total);
-    }
-
-    return total;
-}
-
-function pkupd_write_package_list(db, packages, total_packages,    i) {
-    printf "" > db;
-
-    for (i = 1; i <= total_packages; i++) {
-        print   packages[i]["repo_id"],     \
-                packages[i]["location"],    \
-                packages[i]["series"],      \
-                packages[i]["name"],        \
-                packages[i]["version"],     \
-                packages[i]["arch"],        \
-                packages[i]["build"],       \
-                packages[i]["tag"],         \
-                packages[i]["type"],        \
-                packages[i]["checksum"],    \
-                packages[i]["description"], \
-                packages[i]["required"],    \
-                packages[i]["conflicts"],   \
-                packages[i]["suggests"] >> db;
+        index_repo(REPOS[i], packages);
     }
 }
 
-function pkupd_main(    options, dirs, repos, total_repos, packages, total_packages, status) {
-    if (!pkupd_parse_arguments(ARGC, ARGV, options)) {
+function write_index_dat(    i, index_dat) {
+    index_dat = DIRS["lib"] "/index.dat";
+    printf "" > index_dat;
+
+    for (i = 1; i <= DB["length"]; i++) {
+        print   DB[i]["repo_id"],     \
+                DB[i]["location"],    \
+                DB[i]["series"],      \
+                DB[i]["name"],        \
+                DB[i]["version"],     \
+                DB[i]["arch"],        \
+                DB[i]["build"],       \
+                DB[i]["tag"],         \
+                DB[i]["type"],        \
+                DB[i]["checksum"],    \
+                DB[i]["description"], \
+                DB[i]["required"],    \
+                DB[i]["suggests"],    \
+                DB[i]["src_download"],        \
+                DB[i]["src_download_x86_64"], \
+                DB[i]["src_checksum"],        \
+                DB[i]["src_checksum_x86_64"] >> index_dat;
+    }
+}
+
+function pkupd_main() {
+    if (!pkupd_parse_arguments()) {
         return 1;
     }
 
-    pk_setup_dirs(dirs, options["root"]);
-    if (!pk_check_dirs(dirs)) {
+    pk_setup_dirs(OPTIONS["root"]);
+    if (!pk_check_dirs()) {
         printf "Have a nice day!\n";
-        if (!pk_populate_dirs(dirs)) {
+        if (!pk_populate_dirs()) {
             printf "Failed to set up directories.\n" >> "/dev/stderr";
-            return 1;
+            return 255;
         }
     }
+    pk_parse_options();
 
-    pk_parse_options(dirs, options);
-
-    total_repos = pk_parse_repos_list(dirs, repos);
-    pkupd_sync_repos(repos, total_repos, options);
-    total_packages = pkupd_make_package_list(repos, total_repos, packages);
-    if (!total_packages) {
+    pk_parse_repos_list();
+    sync_repos();
+    db_build();
+    if (!DB["length"]) {
         printf "*\n"
         printf "* It looks like all repositories failed to synchronize.\n";
         printf "* Check your network connection.\n";
@@ -263,7 +255,7 @@ function pkupd_main(    options, dirs, repos, total_repos, packages, total_packa
         return 255;
     }
 
-    pkupd_write_package_list(dirs["lib"] "/index.dat", packages, total_packages);
+    write_index_dat(packages, total_packages);
 }
 
 BEGIN {

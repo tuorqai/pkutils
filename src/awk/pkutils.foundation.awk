@@ -1,33 +1,33 @@
 
-function pk_setup_dirs(_dirs, root) {
-    _dirs["root"]    = root;
-    _dirs["lib"]     = root "/var/lib/pkutils";
-    _dirs["cache"]   = root "/var/cache/pkutils";
-    _dirs["etc"]     = root "/etc/pkutils";
+function pk_setup_dirs(root) {
+    DIRS["root"]    = root;
+    DIRS["lib"]     = root "/var/lib/pkutils";
+    DIRS["cache"]   = root "/var/cache/pkutils";
+    DIRS["etc"]     = root "/etc/pkutils";
 }
 
-function pk_populate_dirs(dirs) {
-    if (system("mkdir -p " dirs["lib"]) != 0)
+function pk_populate_dirs() {
+    if (system("mkdir -p " DIRS["lib"]) != 0)
         return 0;
 
-    if (system("mkdir -p " dirs["cache"]) != 0)
+    if (system("mkdir -p " DIRS["cache"]) != 0)
         return 0;
 
     return 1;
 }
 
-function pk_check_dirs(dirs) {
-    if (system("ls -1 " dirs["lib"] " 1>/dev/null 2>/dev/null") != 0)
+function pk_check_dirs() {
+    if (system("ls -1 " DIRS["lib"] " 1>/dev/null 2>/dev/null") != 0)
         return 0;
     
-    if (system("ls -1 " dirs["cache"] " 1>/dev/null 2>/dev/null") != 0)
+    if (system("ls -1 " DIRS["cache"] " 1>/dev/null 2>/dev/null") != 0)
         return 0;
 
     return 1;
 }
 
-function pk_parse_options(dirs, _options,    file, line, m) {
-    file = dirs["etc"] "/pkutils.conf";
+function pk_parse_options(    file, line, m) {
+    file = DIRS["etc"] "/pkutils.conf";
 
     while ((getline < file) > 0) {
         line++;
@@ -35,18 +35,18 @@ function pk_parse_options(dirs, _options,    file, line, m) {
             continue;
         } else if ($0 ~ /^[a-z_]+\s*=\s*'.*'$/) {
             match($0, /^([a-z_]+)\s*=\s*'(.*)'$/, m);
-            if (m[1] in _options) {
+            if (m[1] in OPTIONS) {
                 continue;
             }
-            _options[m[1]] = m[2];
+            OPTIONS[m[1]] = m[2];
         } else if ($0 ~ /^[a-z_]+\s*=\s*[^=]+$/) {
             match($0, /^([a-z_]+)\s*=\s*([^=]+)$/, m);
-            if (m[1] in _options) {
+            if (m[1] in OPTIONS) {
                 continue;
             }
             if (m[2] == "yes")     m[2] = 1;
             if (m[2] == "no")      m[2] = 0;
-            _options[m[1]] = m[2];
+            OPTIONS[m[1]] = m[2];
         } else {
             printf "warning: failed to parse %s in line %d: %s\n", file, line, $0;
         }
@@ -54,52 +54,39 @@ function pk_parse_options(dirs, _options,    file, line, m) {
     close(file);
 }
 
-function pk_get_installed_packages(dirs, _installed,    cmd, total, m) {
-    cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\"", dirs["root"]);
-    while ((cmd | getline) > 0) {
-        match($0, /^(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)$/, m);
-        total++;
-        _installed[total]["name"]     = m[1];
-        _installed[total]["version"]  = m[2];
-        _installed[total]["arch"]     = m[3];
-        _installed[total]["build"]    = m[4];
-        _installed[total]["tag"]      = m[5];
-    }
-    close(cmd);
-}
-
-function pk_parse_repos_list(dirs, _repos,    file, total, m) {
+function pk_parse_repos_list(    file, total, m) {
     FS = " "; RS = "\n";
 
-    file = dirs["etc"] "/repos.list";
+    file = DIRS["etc"] "/repos.list";
 
     while ((getline < file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
             total++;
-            _repos[total]["name"] = $2;
-            _repos[total]["type"] = $1;
+            REPOS[total]["name"] = $2;
+            REPOS[total]["type"] = $1;
 
             match($3, /(https?|ftp|rsync|file):\/\/([^\/]*)\/(.*)/, m);
-            _repos[total]["url_scheme"] = m[1];
-            _repos[total]["url_host"] = m[2];
-            _repos[total]["url_path"] = m[3];
+            REPOS[total]["url_scheme"] = m[1];
+            REPOS[total]["url_host"] = m[2];
+            REPOS[total]["url_path"] = m[3];
 
-            _repos[total]["dir"] = sprintf("%s/repo_%s", dirs["lib"], _repos[total]["name"]);
-            _repos[total]["cache"] = sprintf("%s/%s", dirs["cache"], _repos[total]["name"]);
+            REPOS[total]["dir"] = sprintf("%s/repo_%s", DIRS["lib"], REPOS[total]["name"]);
+            REPOS[total]["cache"] = sprintf("%s/%s", DIRS["cache"], REPOS[total]["name"]);
 
-            system("mkdir -p " _repos[total]["dir"]);
-            system("mkdir -p " _repos[total]["cache"]);
+            system("mkdir -p " REPOS[total]["dir"]);
+            system("mkdir -p " REPOS[total]["cache"]);
         }
     }
 
     close(file);
+    REPOS["length"] = total;
     return total;
 }
 
-function pk_parse_lock_list(dirs, locked,    file, total) {
+function pk_parse_lock_list(locked,    file, total) {
     FS = " "; RS = "\n";
 
-    file = dirs["etc"] "/lock.list";
+    file = DIRS["etc"] "/lock.list";
 
     while ((getline < file) > 0) {
         total++;
@@ -123,32 +110,52 @@ function __pk_check_md5sum(file, md5sum,    cmd) {
     return 0;
 }
 
-#
-# Return 1 on failure, 0 on success
-#
-function pk_fetch_file(scheme, host, path, output, md5sum, options,    cmd) {
+function pk_make_symlink(dest, src, dry_run,    cmd) {
+    printf "%s ~> %s... ", src, dest;
+    cmd = sprintf("ln -sf %s %s", src, dest);
+    if (dry_run) {
+        printf ">> %s\n", cmd;
+        return 0;
+    }
+    if (system(cmd) > 0) {
+        printf "Failed!\n";
+        return 1;
+    }
+    printf "Done.\n";
+}
+
+function pk_fetch_remote(output, remote, dry_run, args,    cmd) {
+    if (system("test -L " output) == 0) {
+        printf "Found symbolic link %s. Removing... ", output;
+        if (system("rm -rf " output) > 0) {
+            printf "Failed!\n";
+            return 1;
+        }
+        printf "Done.\n";
+    }
+
+    cmd = sprintf("/usr/bin/wget %s -O %s %s", args, output, remote);
+    if (dry_run) {
+        printf ">> %s\n", cmd;
+        return 0;
+    }
+    if (system(cmd) > 0) {
+        printf "Failed to download %s!\n", remote > "/dev/stderr";
+        return 1;
+    }
+}
+
+function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
     if (md5sum > 0 && __pk_check_md5sum(output, md5sum)) {
         printf "File %s is downloaded already.\n", output;
         return 0;
     }
 
     if (scheme ~ /https?|ftp/) {
-        if (system("test -L " output) == 0) {
-            printf "Found symbolic link %s. Removing... ", output;
-            if (system("rm -rf " output) > 0) {
-                printf "Failed!\n";
-                return 1;
-            }
-            printf "\n";
-        }
-
-        cmd = sprintf("/usr/bin/wget %s -O %s %s://%s/%s", options["wget_args"], output, scheme, host, path);
-        if (options["dryrun"]) {
-            printf ">> %s\n", cmd;
-            return 0;
-        }
-        if (system(cmd) > 0) {
-            printf "Failed to download %s://%s/%s!\n", scheme, host, path > "/dev/stderr";
+        failed = pk_fetch_remote(output,
+            sprintf("%s://%s/%s", scheme, host, path),
+            OPTIONS["dryrun"], OPTIONS["wget_args"]);
+        if (failed) {
             return 1;
         }
     } else if (scheme ~ /file|cdrom/) {
@@ -157,20 +164,17 @@ function pk_fetch_file(scheme, host, path, output, md5sum, options,    cmd) {
             return 1;
         }
 
-        printf "Linking /%s to %s... ", path, output;
-        cmd = sprintf("ln -sf /%s %s", path, output);
-        if (options["dryrun"]) {
-            printf ">> %s\n", cmd;
-            return 0;
-        }
-        if (system(cmd) > 0) {
-            printf "Failed!\n";
+        failed = pk_make_symlink("/" output, path, OPTIONS["dryrun"]);
+        if (failed) {
             return 1;
         }
-        printf "Done!\n";
     } else {
         printf "Internal error: Bad URL scheme \"%s\"!\n", scheme > "/dev/stderr";
         return 1;
+    }
+
+    if (OPTIONS["dryrun"]) {
+        return 0;
     }
 
     if (md5sum == 0 || __pk_check_md5sum(output, md5sum)) {
@@ -179,32 +183,6 @@ function pk_fetch_file(scheme, host, path, output, md5sum, options,    cmd) {
 
     printf "Error: wrong MD5 checksum.\n" >> "/dev/stderr";
     return 1;
-}
-
-#
-# -> 0: not installed
-# -> 1: upgradable
-# -> 2: installed
-#
-function pk_is_installed(pk, installed, _oldpk) {
-    for (i in installed) {
-        if ((installed[i]["name"]       == pk["name"]) &&
-            (installed[i]["version"]    == pk["version"]) &&
-            (installed[i]["arch"]       == pk["arch"]) &&
-            (installed[i]["build"]      == pk["build"]) &&
-            (installed[i]["tag"]        == pk["tag"]))
-        {
-            return 1;
-        } else if (installed[i]["name"] == pk["name"]) {
-            _oldpk["version"] = installed[i]["version"];
-            _oldpk["arch"] = installed[i]["arch"];
-            _oldpk["build"] = installed[i]["build"];
-            _oldpk["tag"] = installed[i]["tag"];
-            return 2;
-        }
-    }
-
-    return 0;
 }
 
 function pk_is_locked(pk, locked) {
@@ -247,4 +225,12 @@ function pk_answer(prompt, default_reply,    reply) {
         }
         return 0;
     }
+}
+
+function pk_get_full_version(pk) {
+    if (pk["type"] == "SlackBuild") {
+        return pk["version"];
+    }
+    return sprintf("%s-%s-%d%s",
+        pk["version"], pk["arch"], pk["build"], pk["tag"]);
 }

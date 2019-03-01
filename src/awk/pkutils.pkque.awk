@@ -1,12 +1,15 @@
 
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
+@include "pkutils.deps.awk"
 
 function parse_arguments(queries,    i, m) {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^-[^=]+$/) {
             if (ARGV[i] ~ /^(-A|--show-all)$/) {
                 OPTIONS["show_all"] = 1;
+            } else if (ARGV[i] ~ /^(-D|--show-deps)$/) {
+                OPTIONS["show_deps"] = 1;
             }
         } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
             match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
@@ -32,7 +35,7 @@ function pkque_print_package(pk) {
         pk["description"];
 }
 
-function pkque_main(    i, p, queries, results) {
+function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
     if (!parse_arguments(queries)) {
         return 1;
     }
@@ -60,13 +63,36 @@ function pkque_main(    i, p, queries, results) {
         if (!OPTIONS["show_all"] && DB[p]["repo_id"] == "local") {
             continue;
         }
-        
+
         printf "\n%s:%s/%s %s\n  %s\n",
             DB[p]["repo_id"],
             DB[p]["series"],
             DB[p]["name"],
-            db_get_full_name(DB[p]),
+            db_get_signature(DB[p]),
             DB[p]["description"];
+        
+        if (!OPTIONS["show_deps"]) {
+            continue;
+        }
+
+        delete dlist;
+        make_dependency_list(p, dlist);
+        if (dlist["length"] <= 1) {
+            printf "No dependencies or information is not available.\n";
+            continue;
+        }
+
+        for (j = dlist["length"]; j >= 1; j--) {
+            if (dlist[j] in stash) {
+                continue;
+            }
+            stash[dlist[j]] = 65535;
+            stash["size"]++;
+            fmt = sprintf("  %%%ds* %%s\n", dlist[j, "level"] * 2);
+            printf fmt, "", DB[dlist[j]]["name"];
+        }
+
+        printf "\n  Total dependencies: %d/%d.\n", stash["size"], dlist["length"];
     }
 
     if (results["length"] > 5) {

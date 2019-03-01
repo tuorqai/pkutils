@@ -145,9 +145,11 @@ function index_slackbuild(repo, pk,    i, m) {
             pk["version"] = $i;
         } else if ($i ~ /^SLACKBUILD DOWNLOAD:\s+/) {
             sub(/SLACKBUILD DOWNLOAD:\s+/, "", $i);
+            sub(/:/, "\\:", $i);
             pk["src_download"] = $i;
         } else if ($i ~ /^SLACKBUILD DOWNLOAD_x86_64:\s+/) {
             sub(/SLACKBUILD DOWNLOAD_x86_64:\s+/, "", $i);
+            sub(/:/, "\\:", $i);
             pk["src_download_x86_64"] = $i;
         } else if ($i ~ /^SLACKBUILD MD5SUM:\s+/) {
             sub(/SLACKBUILD MD5SUM:\s+/, "", $i);

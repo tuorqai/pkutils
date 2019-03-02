@@ -110,10 +110,9 @@ function __pk_check_md5sum(file, md5sum,    cmd) {
     return 0;
 }
 
-function pk_make_symlink(dest, src, dry_run,    cmd) {
-    printf "%s ~> %s... ", src, dest;
+function pk_make_symlink(dest, src, md5sum,    cmd) {
     cmd = sprintf("ln -sf %s %s", src, dest);
-    if (dry_run) {
+    if (OPTIONS["dryrun"]) {
         printf ">> %s\n", cmd;
         return 0;
     }
@@ -121,10 +120,22 @@ function pk_make_symlink(dest, src, dry_run,    cmd) {
         printf "Failed!\n";
         return 1;
     }
-    printf "Done.\n";
+
+    if (md5sum == 0 || __pk_check_md5sum(dest, md5sum)) {
+        printf "Done.\n";
+        return 0;
+    }
+
+    printf "wrong MD5 checksum.\n" >> "/dev/stderr";
+    return 1;
 }
 
-function pk_fetch_remote(output, remote,    cmd) {
+function pk_fetch_remote(output, remote, md5sum,    cmd) {
+    if (md5sum > 0 && __pk_check_md5sum(output, md5sum)) {
+        printf "File %s is downloaded already.\n", output;
+        return 0;
+    }
+
     if (system("test -L " output) == 0) {
         printf "Found symbolic link %s. Removing... ", output;
         if (system("rm -rf " output) > 0) {
@@ -139,20 +150,23 @@ function pk_fetch_remote(output, remote,    cmd) {
         printf ">> %s\n", cmd;
         return 0;
     }
+
     if (system(cmd) > 0) {
         printf "Failed to download %s!\n", remote > "/dev/stderr";
         return 1;
     }
-}
 
-function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
-    if (md5sum > 0 && __pk_check_md5sum(output, md5sum)) {
-        printf "File %s is downloaded already.\n", output;
+    if (md5sum == 0 || __pk_check_md5sum(output, md5sum)) {
         return 0;
     }
 
+    printf "Error: wrong MD5 checksum.\n" >> "/dev/stderr";
+    return 1;
+}
+
+function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
     if (scheme ~ /https?|ftp/) {
-        failed = pk_fetch_remote(output, sprintf("%s://%s/%s", scheme, host, path));
+        failed = pk_fetch_remote(output, sprintf("%s://%s/%s", scheme, host, path), md5sum);
         if (failed) {
             return 1;
         }
@@ -162,7 +176,7 @@ function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
             return 1;
         }
 
-        failed = pk_make_symlink("/" output, path, OPTIONS["dryrun"]);
+        failed = pk_make_symlink("/" output, path, md5sum);
         if (failed) {
             return 1;
         }
@@ -171,16 +185,7 @@ function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
         return 1;
     }
 
-    if (OPTIONS["dryrun"]) {
-        return 0;
-    }
-
-    if (md5sum == 0 || __pk_check_md5sum(output, md5sum)) {
-        return 0;
-    }
-
-    printf "Error: wrong MD5 checksum.\n" >> "/dev/stderr";
-    return 1;
+    return 0;
 }
 
 function pk_is_locked(pk, locked) {

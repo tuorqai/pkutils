@@ -148,7 +148,7 @@ function insert_package(p, er, eu, ei,    status) {
     }
 }
 
-function upgrade_system(results,    i) {
+function upgrade_system(results,    i, status) {
     for (i = DB["first_local"]; i <= DB["length"]; i++) {
         status = db_is_upgradable(i);
         if (status == 0) {

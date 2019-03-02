@@ -223,6 +223,7 @@ function write_index_dat(    i, index_dat) {
                 DB[i]["checksum"],    \
                 DB[i]["description"], \
                 DB[i]["required"],    \
+                DB[i]["conflicts"],   \
                 DB[i]["suggests"],    \
                 DB[i]["src_download"],        \
                 DB[i]["src_download_x86_64"], \

@@ -209,7 +209,8 @@ function insert_package(p, er, eu, ei,    status) {
         if (OPTIONS["force"]) {
             elist_add_package(er, p);
         } else {
-            printf "Package %s (%s) installed already.\n", DB[p]["name"], DB[p]["version"];
+            printf "Package %s (%s) is installed already.\n",
+                DB[p]["name"], db_get_signature(DB[p]);
         }
     } else if (status > 65535) {
         elist_add_package(eu, p, status - 65535);

@@ -145,11 +145,9 @@ function index_slackbuild(repo, pk,    i, m) {
             pk["version"] = $i;
         } else if ($i ~ /^SLACKBUILD DOWNLOAD:\s+/) {
             sub(/SLACKBUILD DOWNLOAD:\s+/, "", $i);
-            sub(/:/, "\\:", $i);
             pk["src_download"] = $i;
         } else if ($i ~ /^SLACKBUILD DOWNLOAD_x86_64:\s+/) {
             sub(/SLACKBUILD DOWNLOAD_x86_64:\s+/, "", $i);
-            sub(/:/, "\\:", $i);
             pk["src_download_x86_64"] = $i;
         } else if ($i ~ /^SLACKBUILD MD5SUM:\s+/) {
             sub(/SLACKBUILD MD5SUM:\s+/, "", $i);
@@ -175,7 +173,6 @@ function index_slackbuild(repo, pk,    i, m) {
 
 function index_repo(repo, packages,    file, m) {
     FS = "\n"; RS = "";
-    OFS = ":"; ORS = "\n";
 
     printf "Indexing %s...\n", repo["name"];
 
@@ -209,6 +206,8 @@ function db_build(    i) {
 function write_index_dat(    i, index_dat) {
     index_dat = DIRS["lib"] "/index.dat";
     printf "" > index_dat;
+
+    OFS = "\n"; ORS = "\n--------------------------------\n";
 
     for (i = 1; i <= DB["length"]; i++) {
         print   DB[i]["repo_id"],     \

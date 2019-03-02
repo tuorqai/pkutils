@@ -85,7 +85,8 @@ function db_rebuild(    m, cmd, index_dat, total) {
     DB["last_remote"] = total;
     DB["first_local"] = total + 1;
 
-    cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\" 2> /dev/null", DIRS["root"]);
+    cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\\n\" 2> /dev/null", DIRS["root"]);
+    FS = " "; RS = "\n";
     while ((cmd | getline) > 0) {
         match($0, /^(.*)-([^-]*)-([^-]*)-([0-9])([^-]*)$/, m);
         total++;
@@ -172,6 +173,13 @@ function db_weak_query(results, queries,    i) {
 function db_is_installed(p,    i) {
     for (i = DB["first_local"]; i <= DB["length"]; i++) {
         if (DB[i]["name"] == DB[p]["name"]) {
+            if (DB[p]["type"] == "SlackBuild") {
+                if (DB[i]["version"] == DB[p]["version"]) {
+                    return 1;
+                }
+                return 65535 + i;
+            }
+
             if ((DB[i]["version"] == DB[p]["version"]) && (DB[i]["arch"] == DB[p]["arch"]) &&
                 (DB[i]["build"] == DB[p]["build"]) && (DB[i]["tag"] == DB[p]["tag"]))
             {
@@ -203,11 +211,12 @@ function db_is_upgradable(p,    i) {
 # -- db_dump
 # --------------------------------
 function db_dump(    i, j) {
-    printf "DB size: %d packages\n", DB["length"];
+    printf "DB size: %d (%d) packages\n\n", DB["length"], DB["last_remote"];
     for (i = 1; i <= DB["length"]; i++) {
         printf "== PACKAGE #%d ==\n", i;
         for (j in DB[i]) {
             printf "  %s: %s\n", j, DB[i][j];
         }
+        printf "\n";
     }
 }

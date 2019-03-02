@@ -68,12 +68,49 @@ function elist_prompt(self,    i, p) {
     }
 }
 
-function fetch_sources(pk, tar,    i, failed, total, sources, checksums, m) {
-    printf ">> TODO: FETCH %s SOURCES!\n", pk["name"];
+function fetch_sources(pk, tar, repo,    i, x, total, sources, checksums, m) {
+    # Sperva xvataem zapacovannhie v .tar.gz scripthi dlea sborchi
+    x["path"] = sprintf("%s/%s/%s", repo["url_path"], pk["series"], tar);
+    x["out"] = sprintf("%s/repo_%s/%s", DIRS["lib"], repo["name"], tar);
+    pk_fetch_file(repo["url_scheme"], repo["url_host"], x["path"], x["out"]);
+
+    # Potom sozdaem pusthie directorii dlea nich
+    if (OPTIONS["dryrun"]) {
+        printf ">> mkdir -p %s/repo_%s/%s\n", DIRS["lib"], repo["name"], pk["name"];
+    } else {
+        if (system(sprintf("mkdir -p %s/repo_%s/%s/\n", DIRS["lib"], repo["name"], pk["name"])) > 0) {
+            return 1;
+        }
+    }
+
+    # I tolhco posle etogo moghno teanuth sobstvenno isxodnichi
+    if (OPTIONS["arch"] == "x86_64" && pk["src_download_x86_64"]) {
+        x["download"] = "src_download_x86_64";
+        x["checksum"] = "src_checksum_x86_64";
+    } else {
+        x["download"] = "src_download";
+        x["checksum"] = "src_checksum";
+    }
+
+    total = split(pk[x["download"]], sources, " ");
+    split(pk[x["checksum"]], checksums, " ");
+    if (total <= 0) {
+        return 0;
+    }
+
+    for (i = 1; i <= total; i++) {
+        match(sources[i], /\/([^\/]+)$/, m);
+        if (pk_fetch_remote(DIRS["cache"] "/" m[1], sources[i], checksums[i]) > 0) {
+            return 1;
+        }
+        x["sym"] = sprintf("%s/repo_%s/%s/%s", DIRS["lib"], repo["name"], pk["name"], m[1]);
+        pk_make_symlink(x["sym"], DIRS["cache"] "/" m[1]);
+    }
+
     return 0;
 }
 
-function fetch_package(pk, tar, output,    i, r, pk_url_path) {
+function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
     for (i = 1; i <= REPOS["length"]; i++) {
         if (REPOS[i]["name"] == pk["repo_id"]) {
             r = i;
@@ -87,23 +124,52 @@ function fetch_package(pk, tar, output,    i, r, pk_url_path) {
     }
 
     if (pk["type"] == "SlackBuild") {
-        return fetch_sources(pk, tar);
+        TEMPORARY = REPOS[r]["name"];
+        return fetch_sources(pk, tar, REPOS[r]);
     }
 
     pk_url_path = sprintf("%s/%s/%s", REPOS[r]["url_path"], pk["location"], tar);
-    __fetch_package_output = sprintf("%s/%s", REPOS[r]["cache"], tar);
+    pk_output = sprintf("%s/%s", REPOS[r]["cache"], tar);
+    TEMPORARY = pk_output;
 
     return pk_fetch_file(REPOS[r]["url_scheme"], REPOS[r]["url_host"],
-        pk_url_path, __fetch_package_output, pk["checksum"]);
+        pk_url_path, pk_output, pk["checksum"]);
 }
 
 function elist_fetch(self,    i, p, output, failed) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
         failed += fetch_package(DB[p], self[i, "tar"]);
-        self[i, "cache"] = __fetch_package_output;
+        if (DB[p]["type"] == "SlackBuild") {
+            self[i, "repo"] = TEMPORARY;
+        } else {
+            self[i, "cache"] = TEMPORARY;
+        }
     }
     return failed;
+}
+
+function build_slackbuild(sb, repo_name,    dir, cmd) {
+    dir = sprintf("%s/repo_%s/%s", DIRS["lib"], repo_name, sb["name"]);
+    cmd["untar"] = sprintf("cd %s/repo_%s && tar xf %s.tar.gz",
+        DIRS["lib"], repo_name, sb["name"]);
+    cmd["exports"] = sprintf("export OUTPUT=%s/%s", DIRS["cache"], repo_name);
+    cmd["build"] = sprintf("cd %s && %s && sh %s.SlackBuild",
+        dir, cmd["exports"], sb["name"]);
+
+    if (OPTIONS["dryrun"]) {
+        printf ">> %s\n", cmd["untar"];
+        printf ">> %s\n", cmd["build"];
+        return 1;
+    }
+
+    if (system(cmd["untar"]) > 0) {
+        return 0;
+    }
+    if (system(cmd["build"]) > 0) {
+        return 0;
+    }
+    return 1;
 }
 
 function elist_process(self,    i, p) {
@@ -118,7 +184,7 @@ function elist_process(self,    i, p) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
         if (DB[p]["type"] == "SlackBuild") {
-            printf ">> TODO: BUILD %s!\n", DB[p]["name"];
+            build_slackbuild(DB[p], self[i, "repo"]);
             continue;
         }
 

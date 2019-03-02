@@ -6,10 +6,16 @@
 function parse_arguments(queries,    i, m) {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^-[^=]+$/) {
-            if (ARGV[i] ~ /^(-A|--show-all)$/) {
+            if (ARGV[i] ~ /^(-a|--show-all)$/) {
                 OPTIONS["show_all"] = 1;
-            } else if (ARGV[i] ~ /^(-D|--show-deps)$/) {
+            } else if (ARGV[i] ~ /^(--show-deps)$/) {
                 OPTIONS["show_deps"] = 1;
+            } else if (ARGV[i] ~ /^(--show-desc)$/) {
+                OPTIONS["show_desc"] = 1;
+            } else if (ARGV[i] ~ /^(--no-repeating-deps)$/) {
+                OPTIONS["no_repeat"] = 1;
+            } else if (ARGV[i] ~ /^(--dump-db)$/) {
+                OPTIONS["dump_db"] = 1;
             }
         } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
             match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
@@ -51,11 +57,18 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
     db_rebuild();
     printf " Done.\n";
 
+    if (OPTIONS["dump_db"]) {
+        db_dump();
+        return 0;
+    }
+
     db_weak_query(results, queries);
     if (results["length"] <= 0) {
         printf "No packages found.\n";
         return 0;
     }
+
+    printf "\n";
 
     for (i = 1; i <= results["length"]; i++) {
         p = results[i];
@@ -64,13 +77,20 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
             continue;
         }
 
-        printf "\n%s:%s/%s %s\n  %s\n",
+        printf "%s:%s/%s %s\n",
             DB[p]["repo_id"],
             DB[p]["series"],
             DB[p]["name"],
-            db_get_signature(DB[p]),
-            DB[p]["description"];
-        
+            db_get_signature(DB[p]);
+
+        if (OPTIONS["show_desc"]) {
+            if (!DB[p]["description"]) {
+                printf "  (no description available)\n\n";
+            } else {
+                printf "  %s\n\n", DB[p]["description"];
+            }
+        }
+
         if (!OPTIONS["show_deps"]) {
             continue;
         }
@@ -83,16 +103,19 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
         }
 
         for (j = dlist["length"]; j >= 1; j--) {
-            if (dlist[j] in stash) {
+            if (!(dlist[j] in stash)) {
+                stash[dlist[j]] = 65535;
+                stash["size"]++;
+                fmt = sprintf("  %%%ds`- %%s\n", dlist[j, "level"] * 2);
+            } else if (OPTIONS["no_repeat"]) {
                 continue;
+            } else {
+                fmt = sprintf("  %%%ds`- (%%s)\n", dlist[j, "level"] * 2);
             }
-            stash[dlist[j]] = 65535;
-            stash["size"]++;
-            fmt = sprintf("  %%%ds* %%s\n", dlist[j, "level"] * 2);
             printf fmt, "", DB[dlist[j]]["name"];
         }
 
-        printf "\n  Total dependencies: %d/%d.\n", stash["size"], dlist["length"];
+        printf "\n  Total dependencies: %d/%d.\n\n", stash["size"], dlist["length"];
     }
 
     if (results["length"] > 5) {

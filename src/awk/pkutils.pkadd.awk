@@ -149,17 +149,20 @@ function elist_fetch(self,    i, p, output, failed) {
     return failed;
 }
 
-function build_slackbuild(sb, repo_name,    dir, cmd) {
+function build_slackbuild(sb, syscom, repo_name,    dir, cmd) {
     dir = sprintf("%s/repo_%s/%s", DIRS["lib"], repo_name, sb["name"]);
     cmd["untar"] = sprintf("cd %s/repo_%s && tar xf %s.tar.gz",
         DIRS["lib"], repo_name, sb["name"]);
     cmd["exports"] = sprintf("export OUTPUT=%s/%s", DIRS["cache"], repo_name);
     cmd["build"] = sprintf("cd %s && %s && sh %s.SlackBuild",
         dir, cmd["exports"], sb["name"]);
+    cmd["install"] = sprintf("%s %s/%s/%s-%s-*.t?z",
+        syscom, DIRS["cache"], repo_name, sb["name"], sb["version"]);
 
     if (OPTIONS["dryrun"]) {
         printf ">> %s\n", cmd["untar"];
         printf ">> %s\n", cmd["build"];
+        printf ">> %s\n", cmd["install"];
         return 1;
     }
 
@@ -167,6 +170,9 @@ function build_slackbuild(sb, repo_name,    dir, cmd) {
         return 0;
     }
     if (system(cmd["build"]) > 0) {
+        return 0;
+    }
+    if (system(cmd["install"]) > 0) {
         return 0;
     }
     return 1;
@@ -184,7 +190,7 @@ function elist_process(self,    i, p) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
         if (DB[p]["type"] == "SlackBuild") {
-            build_slackbuild(DB[p], self[i, "repo"]);
+            build_slackbuild(DB[p], self["command"], self[i, "repo"]);
             continue;
         }
 

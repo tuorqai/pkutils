@@ -131,7 +131,34 @@ function elist_process(self,    i, p) {
     }
 }
 
-function pkadd_main(    queries, results, er, eu, ei) {
+function insert_package(p, er, eu, ei,    status) {
+    status = db_is_installed(p);
+    if (status == 1) {
+        if (OPTIONS["force"]) {
+            elist_add_package(er, p);
+        } else {
+            printf "Package %s (%s) installed already.\n", DB[p]["name"], DB[p]["version"];
+        }
+    } else if (status > 65535) {
+        elist_add_package(eu, p, status - 65535);
+    } else {
+        if (!OPTIONS["upgrade"]) {
+            elist_add_package(ei, p);
+        }
+    }
+}
+
+function upgrade_system(results,    i) {
+    for (i = DB["first_local"]; i <= DB["length"]; i++) {
+        status = db_is_upgradable(i);
+        if (status == 0) {
+            continue;
+        }
+        results[++results["length"]] = status;
+    }
+}
+
+function pkadd_main(    i, p, queries, results, er, eu, ei) {
     if (!parse_arguments(queries)) {
         return 255;
     }
@@ -147,13 +174,17 @@ function pkadd_main(    queries, results, er, eu, ei) {
     db_rebuild();
     printf " Done.\n";
 
-    db_query(results, queries);
-    if (results["length"] <= 0) {
-        printf "No packages found.\n";
-        return 0;
-    }
-
     pk_parse_repos_list();
+
+    if (OPTIONS["upgrade"] && !isarray(queries)) {
+        upgrade_system(results);
+    } else {
+        db_query(results, queries);
+        if (results["length"] <= 0) {
+            printf "No packages found.\n";
+            return 0;
+        }
+    }
 
     er["action"] = "REINSTALLED";
     er["command"] = "upgradepkg --reinstall";
@@ -163,26 +194,19 @@ function pkadd_main(    queries, results, er, eu, ei) {
     ei["command"] = "installpkg";
 
     for (i = 1; i <= results["length"]; i++) {
-        printf "Calculating dependencies for %s...\n", db_get_full_name(DB[results[i]]);
+        p = results[i];
+        if (!DB[p]["required"] || !OPTIONS["use_deps"]) {
+            insert_package(p, er, eu, ei);
+            continue;
+        }
+
+        printf "Calculating dependencies for %s...\n", db_get_full_name(DB[p]);
         delete dlist;
-        make_dependency_list(results[i], dlist);
+        make_dependency_list(p, dlist);
         printf "Done!\n";
+
         for (j = 1; j <= dlist["length"]; j++) {
-            p = dlist[j];
-            status = db_is_installed(p);
-            if (status == 1) {
-                if (OPTIONS["force"]) {
-                    elist_add_package(er, p);
-                } else {
-                    printf "Package %s (%s) installed already.\n", DB[p]["name"], DB[p]["version"];
-                }
-            } else if (status > 65535) {
-                elist_add_package(eu, p, status - 65535);
-            } else {
-                if (!OPTIONS["upgrade"]) {
-                    elist_add_package(ei, p);
-                }
-            }
+            insert_package(dlist[j], er, eu, ei);
         }
     }
 

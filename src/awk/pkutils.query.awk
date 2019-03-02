@@ -82,6 +82,7 @@ function db_rebuild(    m, cmd, index_dat, total) {
     }
     close(index_dat);
 
+    DB["last_remote"] = total;
     DB["first_local"] = total + 1;
 
     cmd = sprintf("find %s/var/log/packages -type f -printf \"%%f\n\" 2> /dev/null", DIRS["root"]);
@@ -180,6 +181,21 @@ function db_is_installed(p,    i) {
         }
     }
 
+    return 0;
+}
+
+function db_is_upgradable(p,    i) {
+    for (i = 1; i <= DB["last_remote"]; i++) {
+        if (DB[i]["name"] == DB[p]["name"]) {
+            if ((DB[i]["version"] != DB[p]["version"]) ||
+                (DB[i]["arch"] != DB[p]["arch"]) ||
+                (DB[i]["build"] != DB[p]["build"]) ||
+                (DB[i]["tag"] != DB[p]["tag"]))
+            {
+                return i;
+            }
+        }
+    }
     return 0;
 }
 

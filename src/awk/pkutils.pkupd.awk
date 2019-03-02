@@ -49,7 +49,7 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
         repo["url_path"] = repo["url_path"] "/" repo["name"];
     }
 
-    printf "[%s] Updating %s://%s...\n", repo["type"], repo["url_scheme"], repo["url_path"];
+    printf "[%s] Updating %s://%s/%s...\n", repo["type"], repo["url_scheme"], repo["url_host"], repo["url_path"];
 
     if (repo["type"] == "pk") {
         index_txt = "PACKAGES.TXT";

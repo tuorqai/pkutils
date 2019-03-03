@@ -26,6 +26,11 @@ function pk_check_dirs() {
     return 1;
 }
 
+function set_option(key, value) {
+    # printf ("set_option(): %s -> %s\n", key, value);
+    OPTIONS[key] = value;
+}
+
 function pk_parse_options(    file, line, m) {
     file = DIRS["etc"] "/pkutils.conf";
 
@@ -38,7 +43,7 @@ function pk_parse_options(    file, line, m) {
             if (m[1] in OPTIONS) {
                 continue;
             }
-            OPTIONS[m[1]] = m[2];
+            set_option(m[1], m[2]);
         } else if ($0 ~ /^[a-z_]+\s*=\s*[^=]+$/) {
             match($0, /^([a-z_]+)\s*=\s*([^=]+)$/, m);
             if (m[1] in OPTIONS) {
@@ -46,7 +51,7 @@ function pk_parse_options(    file, line, m) {
             }
             if (m[2] == "yes")     m[2] = 1;
             if (m[2] == "no")      m[2] = 0;
-            OPTIONS[m[1]] = m[2];
+            set_option(m[1], m[2]);
         } else {
             printf "warning: failed to parse %s in line %d: %s\n", file, line, $0;
         }

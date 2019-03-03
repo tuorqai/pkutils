@@ -257,12 +257,22 @@ function db_is_upgradable(p,    i, k) {
 
     for (i = 1; i <= DB["last_remote"]; i++) {
         if (DB[i]["name"] == DB[p]["name"]) {
+            if (DB[i]["type"] == "SlackBuild") {
+                if (DB[i]["version"] != DB[p]["version"]) {
+                    return 65535 + i;
+                } else {
+                    return 1;
+                }
+            }
+
             if ((DB[i]["version"] != DB[p]["version"]) ||
                 (DB[i]["arch"] != DB[p]["arch"]) ||
                 (DB[i]["build"] != DB[p]["build"]) ||
                 (DB[i]["tag"] != DB[p]["tag"]))
             {
                 return 65535 + i;
+            } else {
+                return 1;
             }
         }
     }

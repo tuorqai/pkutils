@@ -4,38 +4,63 @@
 @include "pkutils.deps.awk"
 
 # --------------------------------
+# -- usage
+# --------------------------------
+function usage() {
+    printf "...\n";
+}
+
+# --------------------------------
 # -- parse_arguments
 # --------------------------------
-function parse_arguments(queries,    i, m) {
+function parse_arguments(queries,    i, j, t, a, m) {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^=]+$/) {
-            if (ARGV[i] ~ /^(-u|--upgrade)$/) {
-                OPTIONS["upgrade"] = 1;
-            } else if (ARGV[i] ~ /^(-f|--reinstall)$/) {
-                OPTIONS["force"] = 1;
-            } else if (ARGV[i] ~ /^(-d|--dry-run)$/) {
-                OPTIONS["dryrun"] = 1;
-            } else if (ARGV[i] ~ /^(--enable-deps)$/) {
-                OPTIONS["use_deps"] = 1;
-            } else if (ARGV[i] ~ /^(--disable-deps)$/) {
-                OPTIONS["use_deps"] = 0;
-            } else if (ARGV[i] ~ /^(-F|--fetch)$/) {
-                OPTIONS["fetch_only"] = 1;
-            } else if (ARGV[i] ~ /^(-n|--assume-no)$/) {
-                OPTIONS["always_reply"] = 1000;
-            } else if (ARGV[i] ~ /^(-y|--assume-yes)$/) {
-                OPTIONS["always_reply"] = 1001;
+        if (ARGV[i] ~ /^-[A-Za-z0-9]+$/) {
+            t = split(ARGV[i], a, //);
+            for (j = 2; j <= t; j++) {
+                if (a[j] == "y") {
+                    set_option("always_reply", 1001);
+                } else if (a[j] == "n") {
+                    set_option("always_reply", 1000);
+                } else if (a[j] == "u") {
+                    set_option("upgrade", 1);
+                } else if (a[j] == "f") {
+                    set_option("force", 1);
+                } else if (a[j] == "x") {
+                    set_option("dryrun", 1);
+                } else if (a[j] == "d") {
+                    set_option("fetch_only", 1);
+                } else if (a[j] == "h" || a[j] == "?") {
+                    set_option("usage", 1);
+                } else {
+                    printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
+                    return 0;
+                }
+            }
+        } else if (ARGV[i] ~ /^--?[A-Za-z0-9=\-\.\/]+$/) {
+            t = split(ARGV[i], a, /=/);
+            if (a[1] == "--assume-yes") {
+                set_option("always_reply", 1001);
+            } else if (a[1] == "--assume-no") {
+                set_option("always_reply", 1000);
+            } else if (a[1] == "--upgrade") {
+                set_option("upgrade", 1);
+            } else if (a[1] == "--reinstall") {
+                set_option("force", 1);
+            } else if (a[1] == "--dry-run") {
+                set_option("dryrun", 1);
+            } else if (a[1] == "--download") {
+                set_option("fetch_only", 1);
+            } else if (a[1] == "--enable-deps") {
+                set_option("use_deps", 1);
+            } else if (a[1] == "--disable-deps") {
+                set_option("use_deps", 0);
+            } else if (a[1] == "--help") {
+                set_option("usage", 1);
+            } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
+                set_option("root", a[2]);
             } else {
                 printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
-                return 0;
-            }
-        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
-
-            if (m[1] ~ /^-R$|^--root$/) {
-                OPTIONS["root"]  = m[2];
-            } else {
-                printf "Unrecognized option: %s\n", m[1] >> "/dev/stderr";
                 return 0;
             }
         } else {
@@ -277,6 +302,11 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
         return 255;
     }
 
+    if (OPTIONS["usage"]) {
+        usage();
+        return 0;
+    }
+
     pk_setup_dirs(OPTIONS["root"]);
     if (!pk_check_dirs()) {
         printf "Run `pkupd' first!\n";
@@ -333,6 +363,10 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     elist_prompt(er);
     elist_prompt(eu);
     elist_prompt(ei);
+
+    if (OPTIONS["fetch_only"]) {
+        printf "\nNote: Packages will be downloaded only.";
+    }
 
     if (pk_answer("\nContinue?", "y") == 0) {
         printf "Exiting...\n";

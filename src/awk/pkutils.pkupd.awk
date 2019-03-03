@@ -2,22 +2,30 @@
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 
-function pkupd_parse_arguments(    i, m) {
+function usage() {
+    printf "...\n";
+}
+
+function parse_arguments(    i, j, m, a, t) {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^=]+$/) {
-            if (ARGV[i] ~ /^(-h|-?|--help)$/) {
-                OPTIONS["help"] = 1;
+        if (ARGV[i] ~ /^-[^-]+$/) {
+            t = split(ARGV[i], a, //);
+            for (j = 2; j <= t; j++) {
+                if (a[j] == "h" || a[j] == "?") {
+                    set_option("usage", 1);
+                } else {
+                    printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
+                    return 0;
+                }
+            }
+        } else if (ARGV[i] ~ /^--?.+$/) {
+            t = split(ARGV[i], a, /=/);
+            if (a[1] == "--help") {
+                set_option("usage", 1);
+            } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
+                set_option("root", a[2]);
             } else {
                 printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
-                return 0;
-            }
-        } else if (ARGV[i] ~ /^-([^=]+)=([^=]+)$/) {
-            match(ARGV[i], /^([^=]+)=([^=]+)$/, m);
-
-            if (m[1] ~ /^-R$|^--root$/) {
-                OPTIONS["root"] = m[2];
-            } else {
-                printf "Unrecognized option: %s\n", m[1] >> "/dev/stderr";
                 return 0;
             }
         } else {
@@ -232,8 +240,13 @@ function write_index_dat(    i, index_dat) {
 }
 
 function pkupd_main() {
-    if (!pkupd_parse_arguments()) {
+    if (!parse_arguments()) {
         return 1;
+    }
+
+    if (OPTIONS["usage"]) {
+        usage();
+        return 0;
     }
 
     pk_setup_dirs(OPTIONS["root"]);

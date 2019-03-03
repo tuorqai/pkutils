@@ -68,7 +68,7 @@ function make_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
         }
 
         # teperh nughno polucith index zavisimosti v obsceache
-        d = db_get_by_name(deps[i]);
+        d = db_get_by_name(deps[i], OPTIONS["cordial_deps"] ? DB[p]["repo_id"] : "");
         if (d == 0) {
             printf "Warning: can't find dependency %s for %s\n",
                 deps[i], DB[p]["name"] >> "/dev/stderr";

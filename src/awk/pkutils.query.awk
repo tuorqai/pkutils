@@ -4,10 +4,13 @@
 # Get package index in DB by it's name
 # Polucith index packeta po ego nazvanyu
 # --------------------------------
-function db_get_by_name(name,    i, j, k, cases) {
+function db_get_by_name(name, desired_repo,    i, j, k, cases) {
     k = split(name, cases, /\|/);
     for (i = 1; i <= DB["length"]; i++) {
         for (j = 1; j <= k; j++) {
+            if (desired_repo && DB[i]["repo_id"] != desired_repo) {
+                continue;
+            }
             if (DB[i]["name"] == cases[j]) {
                 return i;
             }

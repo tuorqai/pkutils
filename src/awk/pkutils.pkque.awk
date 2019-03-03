@@ -68,7 +68,7 @@ function pkque_print_package(pk) {
         pk["description"];
 }
 
-function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
+function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
     if (!parse_arguments(queries)) {
         return 1;
     }
@@ -117,13 +117,14 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
 
         if (OPTIONS["show_desc"]) {
             if (!DB[p]["description"]) {
-                printf "  (no description available)\n\n";
+                printf "  (no description available)\n";
             } else {
-                printf "  %s\n\n", DB[p]["description"];
+                printf "  %s\n", DB[p]["description"];
             }
         }
 
         if (!OPTIONS["show_deps"]) {
+            printf "\n";
             continue;
         }
 
@@ -135,16 +136,18 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
         }
 
         for (j = dlist["length"]; j >= 1; j--) {
-            if (!(dlist[j] in stash)) {
-                stash[dlist[j]] = 65535;
+            d = dlist[j];
+            if (!(d in stash)) {
+                stash[d] = 65535;
                 stash["size"]++;
-                fmt = sprintf("  %%%ds`- %%s\n", dlist[j, "level"] * 2);
+                fmt = sprintf("  %%%ds`- %%s (%%s, %%s)\n", dlist[j, "level"] * 2);
             } else if (OPTIONS["no_repeat"]) {
                 continue;
             } else {
-                fmt = sprintf("  %%%ds`- (%%s)\n", dlist[j, "level"] * 2);
+                fmt = sprintf("  %%%ds`- (%%s (%%s, %%s))\n", dlist[j, "level"] * 2);
             }
-            printf fmt, "", DB[dlist[j]]["name"];
+            printf fmt, "",
+                DB[d]["name"], DB[d]["repo_id"], db_get_signature(DB[d]);
         }
 
         printf "  Total dependencies: %d/%d.\n\n", stash["size"], dlist["length"];

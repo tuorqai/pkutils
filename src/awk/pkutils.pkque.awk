@@ -150,7 +150,8 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
                 DB[d]["name"], DB[d]["repo_id"], db_get_signature(DB[d]);
         }
 
-        printf "  Total dependencies: %d/%d.\n\n", stash["size"], dlist["length"];
+        printf "  Total dependencies: %d/%d.\n\n",
+            stash["size"] - 1, dlist["length"] - 1;
         delete stash;
     }
 

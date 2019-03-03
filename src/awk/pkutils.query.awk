@@ -124,7 +124,7 @@ function pkexpr(query, strong, get,    i) {
         if (!get[i]) {
             get[i] = ".*";
         }
-        if (strong || i > 1) {
+        if ((strong || OPTIONS["strong"]) || i > 1) {
             get[i] = "^" get[i] "$";
         }
     }

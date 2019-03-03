@@ -15,7 +15,7 @@ function usage() {
 # --------------------------------
 function parse_arguments(queries,    i, j, t, a, m) {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[A-Za-z0-9]+$/) {
+        if (ARGV[i] ~ /^-[^-]+$/) {
             t = split(ARGV[i], a, //);
             for (j = 2; j <= t; j++) {
                 if (a[j] == "y") {
@@ -37,7 +37,7 @@ function parse_arguments(queries,    i, j, t, a, m) {
                     return 0;
                 }
             }
-        } else if (ARGV[i] ~ /^--?[A-Za-z0-9=\-\.\/]+$/) {
+        } else if (ARGV[i] ~ /^--?.+$/) {
             t = split(ARGV[i], a, /=/);
             if (a[1] == "--assume-yes") {
                 set_option("always_reply", 1001);

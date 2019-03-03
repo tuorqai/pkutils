@@ -103,31 +103,50 @@ function db_rebuild(    m, cmd, index_dat, total) {
 
     DB["length"] = total;
 }
+
+# --------------------------------
+# -- pkexpr
+# get[1] -> name
+# get[2] -> arch
+# get[3] -> version
+# get[4] -> tag
+# get[5] -> repo_id
+# get[6] -> series
+# Format of pkexpr:
+# app~i586=1.3.0!_slack14.2@slackware64:xap
+# --------------------------------
+function pkexpr(query, strong, get,    i) {
+    match(query,
+        /^([^~=!@:]*)~?([^~=!@:]*)=?([^~=!@:]*)!?([^~=!@:]*)@?([^~=!@:]*):?([^~=!@:]*)/,
+        get);
+
+    for (i = 1; i <= 6; i++) {
+        if (!get[i]) {
+            get[i] = ".*";
+        }
+        if (strong || i > 1) {
+            get[i] = "^" get[i] "$";
+        }
+    }
+}
+
 # --------------------------------
 # -- perform_query
 # --------------------------------
-function perform_query(results, query, strong,    i, j, p, f, m) {
-    match(query,
-        /^([^\~=@\/]*)\~?([^\~=@\/]*)=?([^\~=@\/]*)@?([^\~=@\/]*)\/?([^\~=@\/]*)/, m);
-
-    for (i = 1; i <= 5; i++) {
-        if (m[i] == "") {
-            m[i] = ".*";
-        }
-        if (strong || i > 1) {
-            m[i] = "^" m[i] "$";
-        }
-    }
+function perform_query(results, query, strong,    i, j, f, get) {
+    pkexpr(query, strong, get);
 
     for (i = 1; i <= DB["length"]; i++) {
-        if ((DB[i]["name"] ~ m[1]) && (DB[i]["arch"] ~ m[2]) &&
-            (DB[i]["version"] ~ m[3]) && (DB[i]["repo_id"] ~ m[4]) &&
-            (DB[i]["series"] ~ m[5]))
+        if ((DB[i]["name"] ~ get[1]) &&
+            (DB[i]["arch"] ~ get[2]) &&
+            (DB[i]["version"] ~ get[3]) &&
+            (DB[i]["tag"] ~ get[4]) &&
+            (DB[i]["repo_id"] ~ get[5]) &&
+            (DB[i]["series"] ~ get[6]))
         {
             if (strong) {
                 for (j = 1; j <= results["length"]; j++) {
-                    p = results[j];
-                    if (DB[p]["name"] == DB[i]["name"]) {
+                    if (DB[results[j]]["name"] == DB[i]["name"]) {
                         # ispolhzuem flag, t.c. net vozmoghnosti
                         # normalhno vhyti iz vlogennogo cycla
                         f = 65535;
@@ -161,38 +180,78 @@ function db_weak_query(results, queries,    i) {
 }
 
 # --------------------------------
+# -- db_is_locked
+# --------------------------------
+function db_is_locked(p,    i, get) {
+    for (i = 1; i <= LOCK["length"]; i++) {
+        pkexpr(LOCK[i], 0, get);
+        if ((DB[p]["name"] ~ get[1]) &&
+            (DB[p]["arch"] ~ get[2]) &&
+            (DB[p]["tag"] ~ get[3]) &&
+            (DB[p]["version"] ~ get[4]) &&
+            (DB[p]["repo_id"] ~ get[5]) &&
+            (DB[p]["series"] ~ get[6]))
+        {
+            return i;
+        }
+    }
+    return 0;
+}
+
+# --------------------------------
 # -- db_is_installed
 # Etot bratixhca provereaet, ustanovlen li
-# tot ili inoi packet. Na vxod DB i index packeta,
+# tot ili inoi packet. Na vxod DB y index packeta,
 # a na vhixod 1, esli packet ustanovlen localhno,
 # libo 65535 + index obnovleaemogo packeta, esli
 # ustanovlena drugaya versia, libo 0, esli nicego net.
 # --------------------------------
 # Pocemu 65535? Potomu chto mogu.
 # --------------------------------
+# Be sure to pass here REMOTE package index.
+# --------------------------------
 function db_is_installed(p,    i) {
     for (i = DB["first_local"]; i <= DB["length"]; i++) {
-        if (DB[i]["name"] == DB[p]["name"]) {
-            if (DB[p]["type"] == "SlackBuild") {
-                if (DB[i]["version"] == DB[p]["version"]) {
-                    return 1;
-                }
-                return 65535 + i;
-            }
+        if (DB[i]["name"] != DB[p]["name"]) {
+            continue;
+        }
 
-            if ((DB[i]["version"] == DB[p]["version"]) && (DB[i]["arch"] == DB[p]["arch"]) &&
-                (DB[i]["build"] == DB[p]["build"]) && (DB[i]["tag"] == DB[p]["tag"]))
-            {
+        k = db_is_locked(i);
+        if (k >= 1) {
+            return 32767 + k;
+        }
+
+        if (DB[p]["type"] == "SlackBuild") {
+            if (DB[i]["version"] == DB[p]["version"]) {
                 return 1;
             }
             return 65535 + i;
         }
+
+        if ((DB[i]["version"] == DB[p]["version"]) &&
+            (DB[i]["arch"] == DB[p]["arch"]) &&
+            (DB[i]["build"] == DB[p]["build"]) &&
+            (DB[i]["tag"] == DB[p]["tag"]))
+        {
+            return 1;
+        }
+        return 65535 + i;
     }
 
     return 0;
 }
 
-function db_is_upgradable(p,    i) {
+# --------------------------------
+# -- db_is_upgradable
+# Checks if local package is upgradable.
+# Be sure to pass here LOCAL package index.
+# --------------------------------
+function db_is_upgradable(p,    i, k) {
+    k = db_is_locked(p);
+    if (k >= 1) {
+        return 32767 + k;
+    }
+
     for (i = 1; i <= DB["last_remote"]; i++) {
         if (DB[i]["name"] == DB[p]["name"]) {
             if ((DB[i]["version"] != DB[p]["version"]) ||
@@ -200,7 +259,7 @@ function db_is_upgradable(p,    i) {
                 (DB[i]["build"] != DB[p]["build"]) ||
                 (DB[i]["tag"] != DB[p]["tag"]))
             {
-                return i;
+                return 65535 + i;
             }
         }
     }

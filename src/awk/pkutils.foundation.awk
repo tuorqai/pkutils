@@ -83,22 +83,18 @@ function pk_parse_repos_list(    file, total, m) {
     return total;
 }
 
-function pk_parse_lock_list(locked,    file, total) {
+function parse_lock_list(    file) {
     FS = " "; RS = "\n";
 
     file = DIRS["etc"] "/lock.list";
 
     while ((getline < file) > 0) {
-        total++;
-        locked[total]["name"]      = "^" $1 "$";
-        locked[total]["version"]   = "^" $2 "$";
-        locked[total]["arch"]      = "^" $3 "$";
-        locked[total]["build"]     = "^" $4 "$";
-        locked[total]["tag"]       = "^" $5 "$";
+        if ($0 ~ "^#|^\\s*$") {
+            continue;
+        }
+        LOCK[++LOCK["length"]] = $0;
     }
     close(file);
-
-    return total;
 }
 
 function __pk_check_md5sum(file, md5sum,    cmd) {
@@ -212,6 +208,16 @@ function pk_answer(prompt, default_reply,    reply) {
         printf "%s [Y/n] ", prompt;
     } else {
         printf "%s [y/N] ", prompt;
+    }
+
+    if (OPTIONS["always_reply"]) {
+        reply = OPTIONS["always_reply"] - 1000;
+        if (reply) {
+            printf "Y\n";
+        } else {
+            printf "N\n";
+        }
+        return reply;
     }
 
     getline reply < "/dev/stdin";

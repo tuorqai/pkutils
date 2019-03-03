@@ -1,19 +1,22 @@
+# pkexpr format:
+# package-name~arch=version!tag@repo:series
 
-# This file should contain list of regular expressions in
-# the following format:
-#
-# <name> <version> <arch> <build> <tag>
-#
 # Examples:
 #
-# 1. Lock all packages from AlienBOB:
-# .* .* .* [0-9] alien
+# -- you can lock all kernel packages:
+# kernel-.*
+# -- or do it by version:
+# =4\.4\.157
 #
-# 2. Lock all kernel packages:
-# kernel-.* .* .* [0-9] .*
+# -- escape special regex characters, especially '+' and '.':
+# gcc-g\+\+
+# bash=4\.3\.046
+
 #
-# 3. Lock all packages of version 4.14.3:
-# .* 4\.14\.3 .* .* [0-9] .*
+# WARNING: there is no sense to blacklist by repo or package series,
+# since all locally installed packages have 'local' repository ID
+# and 'unknown' series. You can check it out by locking '@local'
+# (you'll find out that all packages are locked).
 #
-# Locked packages will NOT be upgraded.
+# Package locking affects only already installed packages.
 #

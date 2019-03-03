@@ -3,6 +3,9 @@
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
 
+# --------------------------------
+# -- parse_arguments
+# --------------------------------
 function parse_arguments(queries,    i, m) {
     for (i = 1; i < ARGC; i++) {
         if (ARGV[i] ~ /^-[^=]+$/) {
@@ -18,6 +21,10 @@ function parse_arguments(queries,    i, m) {
                 OPTIONS["use_deps"] = 0;
             } else if (ARGV[i] ~ /^(-F|--fetch)$/) {
                 OPTIONS["fetch_only"] = 1;
+            } else if (ARGV[i] ~ /^(-n|--assume-no)$/) {
+                OPTIONS["always_reply"] = 1000;
+            } else if (ARGV[i] ~ /^(-y|--assume-yes)$/) {
+                OPTIONS["always_reply"] = 1001;
             } else {
                 printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
                 return 0;
@@ -39,6 +46,9 @@ function parse_arguments(queries,    i, m) {
     return 1;
 }
 
+# --------------------------------
+# -- elist_add_package
+# --------------------------------
 function elist_add_package(self, p, op,    k) {
     for (k = 1; k <= self["length"]; k++) {
         if (self[k] == p) {
@@ -56,6 +66,9 @@ function elist_add_package(self, p, op,    k) {
     }
 }
 
+# --------------------------------
+# -- elist_prompt
+# --------------------------------
 function elist_prompt(self,    i, p) {
     if (self["length"] == 0) {
         return;
@@ -68,6 +81,9 @@ function elist_prompt(self,    i, p) {
     }
 }
 
+# --------------------------------
+# -- fetch_sources
+# --------------------------------
 function fetch_sources(pk, tar, repo,    i, x, total, sources, checksums, m) {
     # Sperva xvataem zapacovannhie v .tar.gz scripthi dlea sborchi
     x["path"] = sprintf("%s/%s/%s", repo["url_path"], pk["series"], tar);
@@ -110,6 +126,9 @@ function fetch_sources(pk, tar, repo,    i, x, total, sources, checksums, m) {
     return 0;
 }
 
+# --------------------------------
+# -- fetch_package
+# --------------------------------
 function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
     for (i = 1; i <= REPOS["length"]; i++) {
         if (REPOS[i]["name"] == pk["repo_id"]) {
@@ -136,6 +155,9 @@ function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
         pk_url_path, pk_output, pk["checksum"]);
 }
 
+# --------------------------------
+# -- elist_fetch
+# --------------------------------
 function elist_fetch(self,    i, p, output, failed) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
@@ -149,6 +171,9 @@ function elist_fetch(self,    i, p, output, failed) {
     return failed;
 }
 
+# --------------------------------
+# -- build_slackbuild
+# --------------------------------
 function build_slackbuild(sb, syscom, repo_name,    dir, cmd) {
     dir = sprintf("%s/repo_%s/%s", DIRS["lib"], repo_name, sb["name"]);
     cmd["untar"] = sprintf("cd %s/repo_%s && tar xf %s.tar.gz",
@@ -178,6 +203,9 @@ function build_slackbuild(sb, syscom, repo_name,    dir, cmd) {
     return 1;
 }
 
+# --------------------------------
+# -- elist_process
+# --------------------------------
 function elist_process(self,    i, p) {
     if (self["length"] == 0) {
         return;
@@ -203,17 +231,24 @@ function elist_process(self,    i, p) {
     }
 }
 
+# --------------------------------
+# -- insert_package
+# --------------------------------
 function insert_package(p, er, eu, ei,    status) {
     status = db_is_installed(p);
-    if (status == 1) {
+
+    if (status >= 65536) {
+        elist_add_package(eu, p, status - 65535);
+    } else if (status >= 32768) {
+        printf "Package %s is locked by expression %s.\n",
+            DB[p]["name"], LOCK[status - 32767];
+    } else if (status == 1) {
         if (OPTIONS["force"]) {
             elist_add_package(er, p);
         } else {
             printf "Package %s (%s) is installed already.\n",
                 DB[p]["name"], db_get_signature(DB[p]);
         }
-    } else if (status > 65535) {
-        elist_add_package(eu, p, status - 65535);
     } else {
         if (!OPTIONS["upgrade"]) {
             elist_add_package(ei, p);
@@ -221,16 +256,22 @@ function insert_package(p, er, eu, ei,    status) {
     }
 }
 
+# --------------------------------
+# -- upgrade_system
+# --------------------------------
 function upgrade_system(results,    i, status) {
     for (i = DB["first_local"]; i <= DB["length"]; i++) {
         status = db_is_upgradable(i);
-        if (status == 0) {
+        if (status < 65536) {
             continue;
         }
-        results[++results["length"]] = status;
+        results[++results["length"]] = status - 65535;
     }
 }
 
+# --------------------------------
+# -- pkadd_main
+# --------------------------------
 function pkadd_main(    i, p, queries, results, er, eu, ei) {
     if (!parse_arguments(queries)) {
         return 255;
@@ -248,8 +289,9 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     printf " Done.\n";
 
     pk_parse_repos_list();
+    parse_lock_list();
 
-    if (OPTIONS["upgrade"] && !isarray(queries)) {
+    if (OPTIONS["upgrade"] && queries["length"] <= 0) {
         upgrade_system(results);
     } else {
         db_query(results, queries);
@@ -317,6 +359,9 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     return 0;
 }
 
+# --------------------------------
+# -- 
+# --------------------------------
 BEGIN {
     rc = pkadd_main();
     exit rc;

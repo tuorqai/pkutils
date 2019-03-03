@@ -1,4 +1,0 @@
-#!/bin/sh
-
-/usr/bin/gawk -f "pkutils.pkdat.awk" -- $*
-exit $?

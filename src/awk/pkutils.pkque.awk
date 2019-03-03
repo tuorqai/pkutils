@@ -98,7 +98,7 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
         delete dlist;
         make_dependency_list(p, dlist);
         if (dlist["length"] <= 1) {
-            printf "No dependencies or information is not available.\n";
+            printf "No dependencies or information is not available.\n\n";
             continue;
         }
 
@@ -116,10 +116,11 @@ function pkque_main(    i, p, queries, results, dlist, fmt, j, stash) {
         }
 
         printf "\n  Total dependencies: %d/%d.\n\n", stash["size"], dlist["length"];
+        delete stash;
     }
 
     if (results["length"] > 5) {
-        printf "\nTotal packages found: %d.\n", results["length"];
+        printf "Total packages found: %d.\n", results["length"];
     }
 
     printf "\n";

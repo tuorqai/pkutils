@@ -61,13 +61,6 @@ function parse_arguments(queries,    i, j, m, a, t) {
     return 1;
 }
 
-function pkque_print_package(pk) {
-    printf "\n%s:%s/%s %s\n  %s\n",
-        pk["repo_id"], pk["series"], pk["name"],
-        pk_get_full_version(pk),
-        pk["description"];
-}
-
 function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
     if (!parse_arguments(queries)) {
         return 1;
@@ -129,7 +122,7 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
         }
 
         delete dlist;
-        make_dependency_list(p, dlist);
+        add_to_dependency_list(p, dlist);
         if (dlist["length"] <= 1) {
             printf "No dependencies or information is not available.\n\n";
             continue;

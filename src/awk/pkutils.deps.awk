@@ -46,12 +46,15 @@ function is_in_queue(dqueue, p,    k) {
 }
 
 # --------------------------------
-# -- make_dependency_list
+# -- add_to_dependency_list
 # Pomni, chto eta functia - recursivnaya.
 # 4. argument ispolhzuetsea pri
 # recursivnom vhizove.
 # --------------------------------
-function make_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
+# Renamed this function since it's purpose
+# is slightly changed.
+# --------------------------------
+function add_to_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
     dqueue_push(dqueue, p);
 
     total = split(DB[p]["required"], deps, /,/);
@@ -91,7 +94,7 @@ function make_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
         }
 
         # i sleduet recursia...
-        make_dependency_list(d, dlist,    dqueue);
+        add_to_dependency_list(d, dlist,    dqueue);
     }
 
     # TODO: vnimatelhnhy citatelh mog zametith, chto zavisimosti dobavleayutsea

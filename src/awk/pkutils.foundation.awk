@@ -1,9 +1,19 @@
 
 function pk_setup_dirs(root) {
+    if (!root && ENVIRON["ROOT"]) {
+        root = ENVIRON["ROOT"];
+    }
+
     DIRS["root"]    = root;
     DIRS["lib"]     = root "/var/lib/pkutils";
     DIRS["cache"]   = root "/var/cache/pkutils";
     DIRS["etc"]     = root "/etc/pkutils";
+    DIRS["libexec"] = root "/usr/libexec/pkutils";
+
+    # for debugging purposes only
+    if (ENVIRON["PKUTILS_LIBEXEC"]) {
+        DIRS["libexec"] = ENVIRON["PKUTILS_LIBEXEC"];
+    }
 }
 
 function pk_populate_dirs() {
@@ -19,7 +29,7 @@ function pk_populate_dirs() {
 function pk_check_dirs() {
     if (system("ls -1 " DIRS["lib"] " 1>/dev/null 2>/dev/null") != 0)
         return 0;
-    
+
     if (system("ls -1 " DIRS["cache"] " 1>/dev/null 2>/dev/null") != 0)
         return 0;
 
@@ -27,16 +37,19 @@ function pk_check_dirs() {
 }
 
 function set_option(key, value) {
-    # printf ("set_option(): %s -> %s\n", key, value);
+    if (OPTIONS["verbose"] >= 2) {
+        printf ("set_option(): %s -> %s\n", key, value);
+    }
     OPTIONS[key] = value;
 }
 
 function pk_parse_options(    file, line, m) {
+    FS = " "; RS = "\n";
     file = DIRS["etc"] "/pkutils.conf";
 
     while ((getline < file) > 0) {
         line++;
-        if ($0 ~ /^(#|[[:space:]]*$)/) {
+        if ($0 ~ /^#|^\s*$/) {
             continue;
         } else if ($0 ~ /^[a-z_]+\s*=\s*'.*'$/) {
             match($0, /^([a-z_]+)\s*=\s*'(.*)'$/, m);
@@ -59,21 +72,16 @@ function pk_parse_options(    file, line, m) {
     close(file);
 }
 
-function pk_parse_repos_list(    file, total, m) {
+function pk_parse_repos_list(    file, total) {
     FS = " "; RS = "\n";
-
     file = DIRS["etc"] "/repos.list";
 
     while ((getline < file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
             total++;
+            REPOS[total]["uri"] = $3;
             REPOS[total]["name"] = $2;
             REPOS[total]["type"] = $1;
-
-            match($3, /(https?|ftp|rsync|file):\/\/([^\/]*)\/(.*)/, m);
-            REPOS[total]["url_scheme"] = m[1];
-            REPOS[total]["url_host"] = m[2];
-            REPOS[total]["url_path"] = m[3];
 
             REPOS[total]["dir"] = sprintf("%s/repo_%s", DIRS["lib"], REPOS[total]["name"]);
             REPOS[total]["cache"] = sprintf("%s/%s", DIRS["cache"], REPOS[total]["name"]);
@@ -102,7 +110,10 @@ function parse_lock_list(    file) {
     close(file);
 }
 
-function __pk_check_md5sum(file, md5sum,    cmd) {
+# --------------------------------
+# -- check_md5sum
+# --------------------------------
+function check_md5sum(file, md5sum,    cmd) {
     if (!file || !md5sum)
         return 0;
     cmd = sprintf("echo %s %s | /usr/bin/md5sum --check >/dev/null 2>&1", md5sum, file);
@@ -111,97 +122,104 @@ function __pk_check_md5sum(file, md5sum,    cmd) {
     return 0;
 }
 
-function pk_make_symlink(dest, src, md5sum,    cmd) {
-    cmd = sprintf("ln -sf %s %s", src, dest);
-    if (OPTIONS["dryrun"]) {
-        printf ">> %s\n", cmd;
-        return 0;
-    }
-    if (system(cmd) > 0) {
-        printf "Failed!\n";
-        return 1;
-    }
-
-    if (md5sum == 0 || __pk_check_md5sum(dest, md5sum)) {
-        printf "Done.\n";
-        return 0;
-    }
-
-    printf "wrong MD5 checksum.\n" >> "/dev/stderr";
-    return 1;
-}
-
-function pk_fetch_remote(output, remote, md5sum,    cmd) {
-    if (md5sum > 0 && __pk_check_md5sum(output, md5sum)) {
+# --------------------------------
+# -- fetch_file
+# Downloads a file from a remote source.
+# Uses the shell script in /usr/libexec in order
+# to properly handle Ctrl-C interrupt from the user.
+# --------------------------------
+function fetch_file(output, remote, md5sum,    cmd, status) {
+    if (md5sum > 0 && check_md5sum(output, md5sum)) {
         printf "File %s is downloaded already.\n", output;
-        return 0;
-    }
-
-    if (system("test -L " output) == 0) {
-        printf "Found symbolic link %s. Removing... ", output;
-        if (system("rm -rf " output) > 0) {
-            printf "Failed!\n";
-            return 1;
-        }
-        printf "Done.\n";
-    }
-
-    cmd = sprintf("/usr/bin/wget %s -O %s %s", OPTIONS["wget_args"], output, remote);
-    if (OPTIONS["dryrun"]) {
-        printf ">> %s\n", cmd;
-        return 0;
-    }
-
-    if (system(cmd) > 0) {
-        printf "Failed to download %s!\n", remote > "/dev/stderr";
         return 1;
     }
 
-    if (md5sum == 0 || __pk_check_md5sum(output, md5sum)) {
+    if (!OPTIONS["downloader"]) {
+        OPTIONS["downloader"] = "/usr/bin/wget";
+    }
+
+    if (!OPTIONS["wget_args"]) {
+        OPTIONS["wget_args"] = "-O";
+    }
+
+    cmd = sprintf("EXEC=\"%s\" ARGS=\"%s\" %s/fetch.sh %s %s",
+        OPTIONS["downloader"],
+        sprintf("%s %s", OPTIONS["wget_args"], output),
+        DIRS["libexec"], remote, output);
+    if (OPTIONS["dryrun"]) {
+        system("DRYRUN=yes " cmd);
+        return 1;
+    }
+
+    status = system(cmd);
+    if (status == 200) {
+        printf "Got interrupted by user. Stopping... :(\n";
+        exit 200;
+    }
+
+    if (status >= 1) {
+        printf "Failed to download %s.\n", remote >> "/dev/stderr";
         return 0;
+    }
+
+    if (md5sum == 0 || check_md5sum(output, md5sum)) {
+        return 1;
     }
 
     printf "Error: wrong MD5 checksum.\n" >> "/dev/stderr";
-    return 1;
+    return 0;
 }
 
-function pk_fetch_file(scheme, host, path, output, md5sum,    failed) {
-    if (scheme ~ /https?|ftp/) {
-        failed = pk_fetch_remote(output, sprintf("%s://%s/%s", scheme, host, path), md5sum);
-        if (failed) {
-            return 1;
-        }
-    } else if (scheme ~ /file|cdrom/) {
-        if (host) {
-            printf "-- Only local machine for file:// is supported.\n" > "/dev/stderr";
-            return 1;
-        }
-
-        failed = pk_make_symlink("/" output, path, md5sum);
-        if (failed) {
-            return 1;
-        }
-    } else {
-        printf "Internal error: Bad URL scheme \"%s\"!\n", scheme > "/dev/stderr";
+# --------------------------------
+# -- make_symlink
+# --------------------------------
+function make_symlink(dest, src, md5sum,    cmd) {
+    cmd = sprintf("/bin/ln -sf %s %s >/dev/null 2>/dev/null",
+        src, dest);
+    if (OPTIONS["dryrun"]) {
+        printf ">> %s\n", cmd;
         return 1;
     }
 
+    printf "Linking %s to %s... ", src, dest;
+    if (system(cmd) > 0) {
+        printf "Failed!\n";
+        return 0;
+    }
+
+    if (md5sum == 0 || check_md5sum(dest, md5sum)) {
+        printf "Done.\n";
+        return 1;
+    }
+
+    printf "Wrong MD5 checksum.\n" >> "/dev/stderr";
     return 0;
 }
 
-function pk_is_locked(pk, locked) {
-    for (i in locked) {
-        if ((pk["name"]    ~ locked[i]["name"]) &&
-            (pk["version"] ~ locked[i]["version"]) &&
-            (pk["arch"]    ~ locked[i]["arch"]) &&
-            (pk["build"]   ~ locked[i]["build"]) &&
-            (pk["tag"]     ~ locked[i]["tag"]))
-        {
-            return 1;
+# --------------------------------
+# -- get_file
+# --------------------------------
+function get_file(output, uri,    scheme, host, path, m) {
+    match(uri, /^([a-z]+):\/\/([^\/]*)\/(.*)/, m);
+    scheme = m[1];
+    host = m[2];
+    path = m[3];
+    if (scheme ~ /ftp|https?/) {
+        if (!fetch_file(output, uri)) {
+            return 0;
         }
+    } else if (scheme ~ /file|cdrom/) {
+        if (host) {
+            printf "Warning: only local host is supported for file://\n";
+        }
+        if (!make_symlink(output, path)) {
+            return 0;
+        }
+    } else {
+        printf "Error: bad URL scheme \"%s\".\n", scheme;
+        return 0;
     }
-
-    return 0;
+    return 1;
 }
 
 #

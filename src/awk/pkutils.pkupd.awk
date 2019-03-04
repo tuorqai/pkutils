@@ -8,11 +8,13 @@ function usage() {
 
 function parse_arguments(    i, j, m, a, t) {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^-]+$/) {
+        if (ARGV[i] ~ /^-[^=-]+$/) {
             t = split(ARGV[i], a, //);
             for (j = 2; j <= t; j++) {
                 if (a[j] == "h" || a[j] == "?") {
                     set_option("usage", 1);
+                } else if (a[j] == "v") {
+                    set_option("verbose", OPTIONS["verbose"] + 1);
                 } else {
                     printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
                     return 0;
@@ -22,6 +24,8 @@ function parse_arguments(    i, j, m, a, t) {
             t = split(ARGV[i], a, /=/);
             if (a[1] == "--help") {
                 set_option("usage", 1);
+            } else if (a[1] == "--verbose") {
+                set_option("verbose", OPTIONS["verbose"] + 1);
             } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
                 set_option("root", a[2]);
             } else {
@@ -37,27 +41,27 @@ function parse_arguments(    i, j, m, a, t) {
     return 1;
 }
 
-function pkupd_read_checksums(repo,    m, file) {
+function pkupd_read_checksums(repo,    file, entry) {
     RS = "\n"; FS = " ";
+    file = sprintf("%s/repo_%s/CHECKSUMS.md5", DIRS["lib"], repo["name"]);
 
-    while ((getline < repo["checksums_txt"]) > 0) {
-        if (NF == 2) {
-            # match($2, /^.*\/([^\/]*)-[^-]*-[^-]*-[^-]*\.t[bglx]z$/, m);
-            match($2, /([^\/]*$)/, m);
-            file = m[1];
-            repo["checksums"][file] = $1;
+    while ((getline < file) > 0) {
+        if (NF == 2 && length($1) == 32) {
+            repo["checksums"][$2] = $1;
         }
     }
-    close(repo["checksums_txt"]);
+    close(file);
 }
 
 function pkupd_sync_repo(repo,    index_txt, failed) {
-    # quite dirty, but gotta somehow handle official repo's layout
-    if (repo["name"] ~ /slackware|slackware64|extra|pasture|patches|testing/) {
-        repo["url_path"] = repo["url_path"] "/" repo["name"];
+    # quite dirty, but gotta somehow handle the official repo's layout
+    if (repo["name"] ~ /^(slackware(64)?|extra|pasture|patches|testing)$/) {
+        repo["uri"] = repo["uri"] "/" repo["name"];
     }
 
-    printf "[%s] Updating %s://%s/%s...\n", repo["type"], repo["url_scheme"], repo["url_host"], repo["url_path"];
+    printf "Synchronizing %s %s...\n",
+        repo["type"] == "pk" ? "repository" : "SlackBuild repository",
+        repo["name"];
 
     if (repo["type"] == "pk") {
         index_txt = "PACKAGES.TXT";
@@ -68,30 +72,31 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
         return 0;
     }
 
-    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/CHECKSUMS.md5", repo["url_path"]),
-                         sprintf("%s/CHECKSUMS.md5", repo["dir"]),
-                         0);
-    
-    repo["checksums_txt"] = repo["dir"]"/CHECKSUMS.md5"
+    uri = sprintf("%s/CHECKSUMS.md5", repo["uri"]);
+    output = sprintf("%s/repo_%s/CHECKSUMS.md5", DIRS["lib"], repo["name"]);
+    if (!get_file(output, uri)) {
+        failed++;
+    }
+
+    uri = sprintf("%s/CHECKSUMS.md5.asc", repo["uri"]);
+    output = sprintf("%s/repo_%s/CHECKSUMS.md5.asc", DIRS["lib"], repo["name"]);
+    if (!get_file(output, uri)) {
+        failed++;
+    }
+
     pkupd_read_checksums(repo);
 
-    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/CHECKSUMS.md5.asc", repo["url_path"]),
-                         sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]),
-                         repo["checksums"]["CHECKSUMS.md5.asc"]);
-    failed += pk_fetch_file(repo["url_scheme"], repo["url_host"],
-                         sprintf("%s/%s", repo["url_path"], index_txt),
-                         sprintf("%s/%s", repo["dir"], index_txt),
-                         repo["checksums"][index_txt]);
-    repo["index_txt"] = sprintf("%s/%s", repo["dir"], index_txt);
+    uri = sprintf("%s/%s", repo["uri"], index_txt);
+    output = sprintf("%s/repo_%s/%s", DIRS["lib"], repo["name"], index_txt);
+    if (!get_file(output, uri, repo["checksums"]["./" index_txt])) {
+        failed++;
+    }
 
     if (failed > 0) {
         printf "-- Failed to retrieve %d files.\n", failed > "/dev/stderr";
         return 0;
     }
 
-    printf "\n";
     return 1;
 }
 
@@ -102,10 +107,10 @@ function sync_repos(    i) {
             REPOS[i]["failed"] = 1;
         }
     }
-    return;
+    printf "Done.\n";
 }
 
-function index_binary_package(repo, pk,   i, m) {
+function index_binary_package(repo, pk,   i, m, path) {
     for (i = 1; i < NF; i++) {
         if ($i ~ /^PACKAGE NAME:\s+.*/) {
             sub(/PACKAGE NAME:\s+/, "", $i);
@@ -136,8 +141,13 @@ function index_binary_package(repo, pk,   i, m) {
         }
     }
 
+    if (repo["name"] ~ /^(slackware(64)?|extra|pasture|patches|testing)$/) {
+        path = sprintf("./%s/%s", pk["series"], db_get_tar_name(pk));
+    } else {
+        path = sprintf("./%s/%s", pk["location"], db_get_tar_name(pk));
+    }
+    pk["checksum"] = repo["checksums"][path];
     pk["repo_id"] = repo["name"];
-    pk["checksum"] = repo["checksums"][db_get_tar_name(pk)];
 }
 
 function index_slackbuild(repo, pk,    i, m) {
@@ -181,10 +191,15 @@ function index_slackbuild(repo, pk,    i, m) {
 
 function index_repo(repo, packages,    file, m) {
     FS = "\n"; RS = "";
+    if (repo["type"] == "pk") {
+        file = sprintf("%s/repo_%s/PACKAGES.TXT", DIRS["lib"], repo["name"]);
+    } else {
+        file = sprintf("%s/repo_%s/SLACKBUILDS.TXT", DIRS["lib"], repo["name"]);
+    }
 
     printf "Indexing %s...\n", repo["name"];
 
-    while ((getline < repo["index_txt"]) > 0) {
+    while ((getline < file) > 0) {
         if ($0 ~ /^PACKAGE\s+/) {
             k = ++DB["length"];
             DB[k][0] = 0; # specialhnhy hack po pricine otsutstvia privedenia typof
@@ -199,7 +214,7 @@ function index_repo(repo, packages,    file, m) {
             continue;
         }
     }
-    close(repo["index_txt"]);
+    close(file);
 }
 
 function db_build(    i) {

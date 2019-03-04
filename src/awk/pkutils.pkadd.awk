@@ -83,7 +83,6 @@ function elist_add_package(self, p, op,    k) {
 
     k = ++self["length"];
     self[k] = p;
-    self[k, "tar"] = db_get_tar_name(DB[p]);
     if (op) {
         self[k, "hint"] = db_get_signature(DB[op]) " -> " db_get_signature(DB[p]);
     } else {
@@ -109,52 +108,65 @@ function elist_prompt(self,    i, p) {
 # --------------------------------
 # -- fetch_sources
 # --------------------------------
-function fetch_sources(pk, tar, repo,    i, x, total, sources, checksums, m) {
+function fetch_slackbuild(pk, repo,
+                            i, n, d, c, tar, output, uri,
+                            sources, checksums, failed,
+                            basename, sym, m)
+{
     # Sperva xvataem zapacovannhie v .tar.gz scripthi dlea sborchi
-    x["path"] = sprintf("%s/%s/%s", repo["url_path"], pk["series"], tar);
-    x["out"] = sprintf("%s/repo_%s/%s", DIRS["lib"], repo["name"], tar);
-    pk_fetch_file(repo["url_scheme"], repo["url_host"], x["path"], x["out"]);
+    tar = db_get_tar_name(pk);
+    uri = sprintf("%s/%s/%s", repo["uri"], pk["series"], tar);
+    output = sprintf("%s/repo_%s/%s", DIRS["lib"], repo["name"], tar);
+    if (!get_file(output, uri)) {
+        return 0;
+    }
 
-    # Potom sozdaem pusthie directorii dlea nich
+    # Potom sozdaem pusthie directorii dlea nix
     if (OPTIONS["dryrun"]) {
         printf ">> mkdir -p %s/repo_%s/%s\n", DIRS["lib"], repo["name"], pk["name"];
     } else {
         if (system(sprintf("mkdir -p %s/repo_%s/%s/\n", DIRS["lib"], repo["name"], pk["name"])) > 0) {
-            return 1;
+            return 0;
         }
     }
 
     # I tolhco posle etogo moghno teanuth sobstvenno isxodnichi
+    printf "Downloading sources for %s...\n", db_get_full_name(pk);
+
     if (OPTIONS["arch"] == "x86_64" && pk["src_download_x86_64"]) {
-        x["download"] = "src_download_x86_64";
-        x["checksum"] = "src_checksum_x86_64";
+        d = "src_download_x86_64";
+        c = "src_checksum_x86_64";
     } else {
-        x["download"] = "src_download";
-        x["checksum"] = "src_checksum";
+        d = "src_download";
+        c = "src_checksum";
     }
 
-    total = split(pk[x["download"]], sources, " ");
-    split(pk[x["checksum"]], checksums, " ");
-    if (total <= 0) {
-        return 0;
+    n = split(pk[d], sources, " ");
+    if (n <= 0) {
+        return 1;
     }
+    split(pk[c], checksums, " ");
 
-    for (i = 1; i <= total; i++) {
+    for (i = 1; i <= n; i++) {
         match(sources[i], /\/([^\/]+)$/, m);
-        if (pk_fetch_remote(DIRS["cache"] "/" m[1], sources[i], checksums[i]) > 0) {
-            return 1;
+        basename = m[1];
+        output = sprintf("%s/%s", DIRS["cache"], basename);
+        sym = sprintf("%s/repo_%s/%s/%s",
+            DIRS["lib"], repo["name"], pk["name"], basename);
+        if (!fetch_file(output, sources[i], checksums[i]) ||
+            !make_symlink(sym, output))
+        {
+            return 0;
         }
-        x["sym"] = sprintf("%s/repo_%s/%s/%s", DIRS["lib"], repo["name"], pk["name"], m[1]);
-        pk_make_symlink(x["sym"], DIRS["cache"] "/" m[1]);
     }
 
-    return 0;
+    return 1;
 }
 
 # --------------------------------
 # -- fetch_package
 # --------------------------------
-function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
+function fetch_package(pk,    i, r, tar, uri, output) {
     for (i = 1; i <= REPOS["length"]; i++) {
         if (REPOS[i]["name"] == pk["repo_id"]) {
             r = i;
@@ -164,20 +176,26 @@ function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
 
     if (!r) {
         printf "Error: no repo %s\n", pk["repo_id"] > "/dev/stderr";
-        return 1;
+        return 0;
     }
+
+    printf "Downloading package %s...\n", db_get_full_name(pk);
 
     if (pk["type"] == "SlackBuild") {
         TEMPORARY = REPOS[r]["name"];
-        return fetch_sources(pk, tar, REPOS[r]);
+        return fetch_slackbuild(pk, REPOS[r]);
     }
 
-    pk_url_path = sprintf("%s/%s/%s", REPOS[r]["url_path"], pk["location"], tar);
-    pk_output = sprintf("%s/%s", REPOS[r]["cache"], tar);
-    TEMPORARY = pk_output;
+    tar = db_get_tar_name(pk);
+    uri = sprintf("%s/%s/%s", REPOS[r]["uri"], pk["location"], tar);
+    output = sprintf("%s/%s", REPOS[r]["cache"], tar);
+    TEMPORARY = output;
 
-    return pk_fetch_file(REPOS[r]["url_scheme"], REPOS[r]["url_host"],
-        pk_url_path, pk_output, pk["checksum"]);
+    if (!get_file(output, uri, pk["checksum"])) {
+        return 0;
+    }
+
+    return 1;
 }
 
 # --------------------------------
@@ -186,7 +204,10 @@ function fetch_package(pk, tar,    i, r, pk_url_path, pk_output) {
 function elist_fetch(self,    i, p, output, failed) {
     for (i = 1; i <= self["length"]; i++) {
         p = self[i];
-        failed += fetch_package(DB[p], self[i, "tar"]);
+        if (!fetch_package(DB[p])) {
+            printf "f++\n";
+            failed++;
+        }
         if (DB[p]["type"] == "SlackBuild") {
             self[i, "repo"] = TEMPORARY;
         } else {
@@ -199,30 +220,24 @@ function elist_fetch(self,    i, p, output, failed) {
 # --------------------------------
 # -- build_slackbuild
 # --------------------------------
-function build_slackbuild(sb, syscom, repo_name,    dir, cmd) {
-    dir = sprintf("%s/repo_%s/%s", DIRS["lib"], repo_name, sb["name"]);
-    cmd["untar"] = sprintf("cd %s/repo_%s && tar xf %s.tar.gz",
-        DIRS["lib"], repo_name, sb["name"]);
-    cmd["exports"] = sprintf("export OUTPUT=%s/%s", DIRS["cache"], repo_name);
-    cmd["build"] = sprintf("cd %s && %s && sh %s.SlackBuild",
-        dir, cmd["exports"], sb["name"]);
-    cmd["install"] = sprintf("%s %s/%s/%s-%s-*.t?z",
-        syscom, DIRS["cache"], repo_name, sb["name"], sb["version"]);
+function build_slackbuild(sb, syscom, repo_name,    status, cmd) {
+    cmd = sprintf("PK_CACHEDIR=\"%s\" PK_LIBDIR=\"%s\" %s/build.sh %s %s \"%s\"",
+        DIRS["cache"], DIRS["lib"],
+        DIRS["libexec"],
+        sb["name"], repo_name, syscom);
 
     if (OPTIONS["dryrun"]) {
-        printf ">> %s\n", cmd["untar"];
-        printf ">> %s\n", cmd["build"];
-        printf ">> %s\n", cmd["install"];
+        system("DRYRUN=yes " cmd);
         return 1;
     }
 
-    if (system(cmd["untar"]) > 0) {
-        return 0;
+    status = system(cmd);
+    if (status == 200) {
+        printf "Got interrupted by user. Stopping... :(\n";
+        exit 200;
     }
-    if (system(cmd["build"]) > 0) {
-        return 0;
-    }
-    if (system(cmd["install"]) > 0) {
+    if (status >= 1) {
+        printf "Failed to build %s.\n", db_get_full_name(sb);
         return 0;
     }
     return 1;
@@ -298,6 +313,8 @@ function upgrade_system(results,    i, status) {
 # -- pkadd_main
 # --------------------------------
 function pkadd_main(    i, p, queries, results, er, eu, ei) {
+    printf "pkadd 5.0m13\n";
+
     if (!parse_arguments(queries)) {
         return 255;
     }
@@ -321,8 +338,13 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     pk_parse_repos_list();
     parse_lock_list();
 
-    if (OPTIONS["upgrade"] && queries["length"] <= 0) {
-        upgrade_system(results);
+    if (queries["length"] <= 0) {
+        if (OPTIONS["upgrade"]) {
+            upgrade_system(results);
+        } else {
+            printf "No query.\n";
+            return 0;
+        }
     } else {
         db_query(results, queries);
         if (results["length"] <= 0) {
@@ -338,20 +360,19 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     ei["action"] = "INSTALLED";
     ei["command"] = "installpkg";
 
-    for (i = 1; i <= results["length"]; i++) {
-        p = results[i];
-        if (!DB[p]["required"] || !OPTIONS["use_deps"]) {
-            insert_package(p, er, eu, ei);
-            continue;
+    if (OPTIONS["use_deps"]) {
+        printf "Resolving dependencies...\n";
+        for (i = 1; i <= results["length"]; i++) {
+            add_to_dependency_list(results[i], dlist);
         }
-
-        printf "Calculating dependencies for %s...\n", db_get_full_name(DB[p]);
-        delete dlist;
-        make_dependency_list(p, dlist);
         printf "Done!\n";
 
-        for (j = 1; j <= dlist["length"]; j++) {
-            insert_package(dlist[j], er, eu, ei);
+        for (i = 1; i <= dlist["length"]; i++) {
+            insert_package(dlist[i], er, eu, ei);
+        }
+    } else {
+        for (i = 1; i <= results["length"]; i++) {
+            insert_package(results[i], er, eu, ei);
         }
     }
 
@@ -364,8 +385,12 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     elist_prompt(eu);
     elist_prompt(ei);
 
+    printf "\nSummary: %d reinstalled, %d upgraded, %d installed (%d total).\n",
+        er["length"], eu["length"], ei["length"],
+        (er["length"] + eu["length"] + ei["length"]);
+
     if (OPTIONS["fetch_only"]) {
-        printf "\nNote: Packages will be downloaded only.";
+        printf "Note: Packages will be downloaded only.";
     }
 
     if (pk_answer("\nContinue?", "y") == 0) {
@@ -394,7 +419,7 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
 }
 
 # --------------------------------
-# -- 
+# --
 # --------------------------------
 BEGIN {
     rc = pkadd_main();

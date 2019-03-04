@@ -29,6 +29,9 @@ find -L . \
 mkdir -p $PKG/usr/sbin
 cp src/pk??? $PKG/usr/sbin
 
+mkdir -p $PKG/usr/libexec/pkutils
+cp src/sh/*.sh $PKG/usr/libexec/pkutils
+
 mkdir -p $PKG/usr/share/awk
 cp src/awk/pkutils.*.awk $PKG/usr/share/awk
 

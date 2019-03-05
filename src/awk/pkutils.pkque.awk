@@ -1,4 +1,5 @@
 
+@include "pkutils.version.awk"
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
@@ -24,6 +25,8 @@ function parse_arguments(queries,    i, j, m, a, t) {
                     set_option("dump_db", 1);
                 } else if (a[j] == "s") {
                     set_option("strong", 1);
+                } else if (a[j] == "V") {
+                    set_option("usage", 2);
                 } else if (a[j] == "h" || a[j] == "?") {
                     set_option("usage", 1);
                 } else {
@@ -45,6 +48,8 @@ function parse_arguments(queries,    i, j, m, a, t) {
                 set_option("dump_db", 1);
             } else if (a[1] == "--strong") {
                 set_option("strong", 1);
+            } else if (a[1] == "--version") {
+                set_option("usage", 2);
             } else if (a[1] == "--help") {
                 set_option("usage", 1);
             } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
@@ -66,7 +71,12 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
         return 1;
     }
 
-    if (OPTIONS["usage"]) {
+    if (OPTIONS["usage"] >= 2) {
+        pkutils_version();
+        return 0;
+    }
+
+    if (OPTIONS["usage"] >= 1) {
         usage();
         return 0;
     }

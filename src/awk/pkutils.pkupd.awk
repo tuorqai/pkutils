@@ -1,4 +1,5 @@
 
+@include "pkutils.version.awk"
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 
@@ -11,7 +12,9 @@ function parse_arguments(    i, j, m, a, t) {
         if (ARGV[i] ~ /^-[^=-]+$/) {
             t = split(ARGV[i], a, //);
             for (j = 2; j <= t; j++) {
-                if (a[j] == "h" || a[j] == "?") {
+                if (a[j] == "V") {
+                    set_option("usage", 2);
+                } else if (a[j] == "h" || a[j] == "?") {
                     set_option("usage", 1);
                 } else if (a[j] == "v") {
                     set_option("verbose", OPTIONS["verbose"] + 1);
@@ -22,7 +25,9 @@ function parse_arguments(    i, j, m, a, t) {
             }
         } else if (ARGV[i] ~ /^--?.+$/) {
             t = split(ARGV[i], a, /=/);
-            if (a[1] == "--help") {
+            if (a[1] == "--version") {
+                set_option("usage", 2);
+            } else if (a[1] == "--help") {
                 set_option("usage", 1);
             } else if (a[1] == "--verbose") {
                 set_option("verbose", OPTIONS["verbose"] + 1);
@@ -259,7 +264,12 @@ function pkupd_main() {
         return 1;
     }
 
-    if (OPTIONS["usage"]) {
+    if (OPTIONS["usage"] >= 2) {
+        pkutils_version();
+        return 0;
+    }
+
+    if (OPTIONS["usage"] >= 1) {
         usage();
         return 0;
     }

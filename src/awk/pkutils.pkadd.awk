@@ -1,4 +1,5 @@
 
+@include "pkutils.version.awk"
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
@@ -15,7 +16,7 @@ function usage() {
 # --------------------------------
 function parse_arguments(queries,    i, j, t, a, m) {
     for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^-]+$/) {
+        if (ARGV[i] ~ /^-[^=-]+$/) {
             t = split(ARGV[i], a, //);
             for (j = 2; j <= t; j++) {
                 if (a[j] == "y") {
@@ -30,8 +31,12 @@ function parse_arguments(queries,    i, j, t, a, m) {
                     set_option("dryrun", 1);
                 } else if (a[j] == "d") {
                     set_option("fetch_only", 1);
+                } else if (a[j] == "V") {
+                    set_option("usage", 2);
                 } else if (a[j] == "h" || a[j] == "?") {
                     set_option("usage", 1);
+                } else if (a[j] == "v") {
+                    set_option("verbose", OPTIONS["verbose"] + 1);
                 } else {
                     printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
                     return 0;
@@ -55,8 +60,12 @@ function parse_arguments(queries,    i, j, t, a, m) {
                 set_option("use_deps", 1);
             } else if (a[1] == "--disable-deps") {
                 set_option("use_deps", 0);
+            } else if (a[1] == "--version") {
+                set_option("usage", 2);
             } else if (a[1] == "--help") {
                 set_option("usage", 1);
+            } else if (a[1] == "--verbose") {
+                set_option("verbose", OPTIONS["verbose"] + 1);
             } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
                 set_option("root", a[2]);
             } else {
@@ -313,13 +322,16 @@ function upgrade_system(results,    i, status) {
 # -- pkadd_main
 # --------------------------------
 function pkadd_main(    i, p, queries, results, er, eu, ei) {
-    printf "pkadd 5.0m13\n";
-
     if (!parse_arguments(queries)) {
         return 255;
     }
 
-    if (OPTIONS["usage"]) {
+    if (OPTIONS["usage"] >= 2) {
+        pkutils_version();
+        return 0;
+    }
+
+    if (OPTIONS["usage"] >= 1) {
         usage();
         return 0;
     }

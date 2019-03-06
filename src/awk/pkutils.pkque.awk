@@ -1,11 +1,43 @@
 
 @include "pkutils.version.awk"
+@include "pkutils.argparser.awk"
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
 
-function usage() {
-    printf "...\n";
+function arg_version()      { set_option("usage", 2); }
+function arg_help()         { set_option("usage", 1); }
+function arg_verbose()      { set_option("verbose", OPTIONS["verbose"] + 1); }
+function arg_root(v)        { set_option("root", v); }
+function arg_dump_db()      { set_option("dump_db", 1); }
+function arg_strong()       { set_option("strong", 1); }
+function arg_show_all()     { set_option("show_all", 1); }
+function arg_show_deps()    { set_option("show_deps", 1); }
+function arg_show_desc()    { set_option("show_desc", 1); }
+function arg_no_repeat_deps() { set_option("no_repeat", 1); }
+
+function register_arguments() {
+    register_argument("V", "--version", "arg_version",
+        "Show the version and quit.");
+    register_argument("?", "--help", "arg_help",
+        "Show the usage page.");
+    register_argument("v", "--verbose", "arg_verbose",
+        "Increase the verbosity level.");
+    register_argument("-", "--root", "arg_root",
+        "Set other root directory.", 1);
+    
+    register_argument("0", "--dump-db", "arg_dump_db",
+        "Print out all contents of the database in human-readable format and exit.");
+    register_argument("s", "--strong", "arg_strong",
+        "Enable strict search.");
+    register_argument("a", "--show-all", "arg_show_all",
+        "Include locally installed packages in the results.");
+    register_argument("p", "--show-deps", "arg_show_deps",
+        "Show dependency tree.");
+    register_argument("n", "--no-repeat-deps", "arg_no_repeat_deps",
+        "Don't list repeating dependencies in the tree.");
+    register_argument("e", "--show-desc", "arg_show_desc",
+        "Show description of the package if it's available.");
 }
 
 function parse_arguments(queries,    i, j, m, a, t) {
@@ -67,7 +99,8 @@ function parse_arguments(queries,    i, j, m, a, t) {
 }
 
 function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
-    if (!parse_arguments(queries)) {
+    register_arguments();
+    if (!parse_arguments3(queries)) {
         return 1;
     }
 
@@ -77,7 +110,8 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
     }
 
     if (OPTIONS["usage"] >= 1) {
-        usage();
+        usage("pkque", "Part of pkutils: Search internal package database.",
+            "[OPTIONS] <PKEXPR...>");
         return 0;
     }
 

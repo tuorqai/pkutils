@@ -1,83 +1,47 @@
 
 @include "pkutils.version.awk"
+@include "pkutils.argparser.awk"
 @include "pkutils.foundation.awk"
 @include "pkutils.query.awk"
 @include "pkutils.deps.awk"
 
-# --------------------------------
-# -- usage
-# --------------------------------
-function usage() {
-    printf "...\n";
-}
+function arg_assume_no()    { set_option("always_reply", 1000); }
+function arg_assume_yes()   { set_option("always_reply", 1001); }
+function arg_upgrade()      { set_option("upgrade", 1); }
+function arg_reinstall()    { set_option("force", 1); }
+function arg_dry_run()      { set_option("dryrun", 1); }
+function arg_download()     { set_option("fetch", 1); }
+function arg_verbose()      { set_option("verbose", OPTIONS["verbose"] + 1); }
+function arg_version()      { set_option("usage", 2); }
+function arg_help()         { set_option("usage", 1); }
+function arg_root(v)        { set_option("root", v); }
 
 # --------------------------------
-# -- parse_arguments
+# -- register_arguments
 # --------------------------------
-function parse_arguments(queries,    i, j, t, a, m) {
-    for (i = 1; i < ARGC; i++) {
-        if (ARGV[i] ~ /^-[^=-]+$/) {
-            t = split(ARGV[i], a, //);
-            for (j = 2; j <= t; j++) {
-                if (a[j] == "y") {
-                    set_option("always_reply", 1001);
-                } else if (a[j] == "n") {
-                    set_option("always_reply", 1000);
-                } else if (a[j] == "u") {
-                    set_option("upgrade", 1);
-                } else if (a[j] == "f") {
-                    set_option("force", 1);
-                } else if (a[j] == "x") {
-                    set_option("dryrun", 1);
-                } else if (a[j] == "d") {
-                    set_option("fetch_only", 1);
-                } else if (a[j] == "V") {
-                    set_option("usage", 2);
-                } else if (a[j] == "h" || a[j] == "?") {
-                    set_option("usage", 1);
-                } else if (a[j] == "v") {
-                    set_option("verbose", OPTIONS["verbose"] + 1);
-                } else {
-                    printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
-                    return 0;
-                }
-            }
-        } else if (ARGV[i] ~ /^--?.+$/) {
-            t = split(ARGV[i], a, /=/);
-            if (a[1] == "--assume-yes") {
-                set_option("always_reply", 1001);
-            } else if (a[1] == "--assume-no") {
-                set_option("always_reply", 1000);
-            } else if (a[1] == "--upgrade") {
-                set_option("upgrade", 1);
-            } else if (a[1] == "--reinstall") {
-                set_option("force", 1);
-            } else if (a[1] == "--dry-run") {
-                set_option("dryrun", 1);
-            } else if (a[1] == "--download") {
-                set_option("fetch_only", 1);
-            } else if (a[1] == "--enable-deps") {
-                set_option("use_deps", 1);
-            } else if (a[1] == "--disable-deps") {
-                set_option("use_deps", 0);
-            } else if (a[1] == "--version") {
-                set_option("usage", 2);
-            } else if (a[1] == "--help") {
-                set_option("usage", 1);
-            } else if (a[1] == "--verbose") {
-                set_option("verbose", OPTIONS["verbose"] + 1);
-            } else if ((a[1] == "-R" || a[1] == "--root") && t == 2) {
-                set_option("root", a[2]);
-            } else {
-                printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
-                return 0;
-            }
-        } else {
-            queries[++queries["length"]] = ARGV[i];
-        }
-    }
+function register_arguments() {
+    register_argument("V", "--version", "arg_version",
+        "Show the version and quit.");
+    register_argument("?", "--help", "arg_help",
+        "Show the usage page.");
+    register_argument("v", "--verbose", "arg_verbose",
+        "Increase the verbosity level.");
+    register_argument("-", "--root", "arg_root",
+        "Set other root directory.", 1);
+    
+    register_argument("u", "--upgrade", "arg_upgrade",
+        "Set pkadd to the upgrade mode. Without any pkexprs given, it will upgrade all available packages.");
+    register_argument("f", "--reinstall", "arg_reinstall",
+        "Force reinstallation of packages.");
+    register_argument("d", "--download", "arg_download",
+        "Do not install packages, but download them.");
+    register_argument("x", "--dry-run", "arg_dry_run",
+        "Do not actually install nor download packages. No changes will be done on the system.");
 
-    return 1;
+    register_argument("y", "--assume-yes", "arg_assume_yes",
+        "Assume that user replies Y to all prompts.");
+    register_argument("n", "--assume-no", "arg_assume_no",
+        "Assume that user replies N to all prompts.");
 }
 
 # --------------------------------
@@ -322,7 +286,8 @@ function upgrade_system(results,    i, status) {
 # -- pkadd_main
 # --------------------------------
 function pkadd_main(    i, p, queries, results, er, eu, ei) {
-    if (!parse_arguments(queries)) {
+    register_arguments();
+    if (!parse_arguments3(queries)) {
         return 255;
     }
 
@@ -332,7 +297,8 @@ function pkadd_main(    i, p, queries, results, er, eu, ei) {
     }
 
     if (OPTIONS["usage"] >= 1) {
-        usage();
+        usage("pkadd", "Install or upgrade packages. Part of pkutils.",
+            "[OPTIONS] <PKEXPR...>");
         return 0;
     }
 

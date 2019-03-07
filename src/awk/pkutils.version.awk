@@ -19,9 +19,9 @@
 #
 
 function pkutils_version_get() {
-    return "5.0m16";
+    return "5.1.0";
 }
 
 function pkutils_version() {
-    printf "  pkutils 5.0m16\n\n";
+    printf "  pkutils 5.1.0\n\n";
 }

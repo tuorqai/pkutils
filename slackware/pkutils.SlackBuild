@@ -1,7 +1,7 @@
 #!/bin/sh
 
 PRGNAM=pkutils
-VERSION=${VERSION:-5.0m16}
+VERSION=${VERSION:-5.1.0}
 BUILD=${BUILD:-1}
 TAG=${TAG:-_xoffy}
 ARCH=noarch

@@ -1,4 +1,14 @@
+# FORMAT:
+# type name url [subrepos]
+#
+# * type is either `pk' or `sb'
+# * Please use `slackware' or `slackware64' for official repositories.
+#   For third-party repos you can use any string.
+# * URL must point to a directory with PACKAGES.TXT (SLACKBUILDS.TXT) file.
+# * Sub-repos are used only by official repository.
+#   Just leave default.
 
-pk patches https://mirrors.slackware.com/slackware/slackware64-14.2
-pk extra https://mirrors.slackware.com/slackware/slackware64-14.2
-pk slackware64 https://mirrors.slackware.com/slackware/slackware64-14.2
+pk slackware64 https://mirrors.slackware.com/slackware/slackware64-14.2 patches slackware64 extra pasture
+
+# The lower is repo the higher is priority.
+# So add third-party repos AFTER official repository.

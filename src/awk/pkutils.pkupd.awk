@@ -27,6 +27,7 @@ function arg_version()      { set_option("usage", 2); }
 function arg_help()         { set_option("usage", 1); }
 function arg_verbose()      { set_option("verbose", OPTIONS["verbose"] + 1); }
 function arg_root(v)        { set_option("root", v); }
+function arg_rebuild()      { set_option("rebuild", 1); }
 
 function register_arguments() {
     register_argument("V", "--version", "arg_version",
@@ -37,6 +38,9 @@ function register_arguments() {
         "Increase the verbosity level.");
     register_argument("-", "--root", "arg_root",
         "Set other root directory.", 1);
+    
+    register_argument("r", "--rebuild", "arg_rebuild",
+        "Rebuild the database without synchronizing repositories.");
 }
 
 function pkupd_read_checksums(repo,    file, entry) {
@@ -52,11 +56,6 @@ function pkupd_read_checksums(repo,    file, entry) {
 }
 
 function pkupd_sync_repo(repo,    index_txt, failed) {
-    # quite dirty, but gotta somehow handle the official repo's layout
-    if (repo["name"] ~ /^(extra|pasture|patches|testing)$/) {
-        repo["uri"] = repo["uri"] "/" repo["name"];
-    }
-
     printf "Synchronizing %s %s...\n",
         repo["type"] == "pk" ? "repository" : "SlackBuild repository",
         repo["name"];
@@ -71,34 +70,39 @@ function pkupd_sync_repo(repo,    index_txt, failed) {
     }
 
     uri = sprintf("%s/CHECKSUMS.md5", repo["uri"]);
-    output = sprintf("%s/repo_%s/CHECKSUMS.md5", DIRS["lib"], repo["name"]);
+    output = sprintf("%s/CHECKSUMS.md5", repo["dir"]);
     if (!get_file(output, uri)) {
         failed++;
     }
 
-    uri = sprintf("%s/CHECKSUMS.md5.asc", repo["uri"]);
-    output = sprintf("%s/repo_%s/CHECKSUMS.md5.asc", DIRS["lib"], repo["name"]);
-    if (!get_file(output, uri)) {
-        failed++;
+    if (OPTIONS["check_gpg"]) {
+        uri = sprintf("%s/CHECKSUMS.md5.asc", repo["uri"]);
+        output = sprintf("%s/CHECKSUMS.md5.asc", repo["dir"]);
+        if (!get_file(output, uri)) {
+            failed++;
+        }
     }
 
     pkupd_read_checksums(repo);
 
     uri = sprintf("%s/%s", repo["uri"], index_txt);
-    output = sprintf("%s/repo_%s/%s", DIRS["lib"], repo["name"], index_txt);
+    output = sprintf("%s/%s", repo["dir"], index_txt);
     if (!get_file(output, uri, repo["checksums"]["./" index_txt])) {
         failed++;
     }
 
     if (failed > 0) {
-        printf "-- Failed to retrieve %d files.\n", failed > "/dev/stderr";
+        printf "Failed to retrieve %d files.\n", failed > "/dev/stderr";
         return 0;
     }
-
     return 1;
 }
 
-function sync_repos(    i) {
+function sync_repos(    i, j) {
+    if (OPTIONS["rebuild"]) {
+        return;
+    }
+
     for (i = REPOS["length"]; i >= 1; i--) {
         if (!pkupd_sync_repo(REPOS[i])) {
             printf "Error: failed to synchronize \"%s\" repo!\n", REPOS[i]["name"] > "/dev/stderr";
@@ -121,9 +125,15 @@ function index_binary_package(repo, pk,   i, m, path) {
             pk["type"]     = m[6];
         } else if ($i ~ /^PACKAGE LOCATION:\s+.*/) {
             sub(/PACKAGE LOCATION:\s+(\.\/)?/, "", $i);
-            match($i, /([^\/]*$)/, m);
+            match($i, /^([^\/]*)\/([^\/]*)/, m);
             pk["location"] = $i;
             pk["series"]   = m[1];
+            if (pk["series"] ~ /^slackware(64)?$/) {
+                pk["series"] = m[2];
+            }
+            if (!pk["series"] || pk["series"] == ".") {
+                pk["series"] = repo["name"];
+            }
         } else if ($i ~ /^PACKAGE REQUIRED:\s+.*/) {
             sub(/PACKAGE REQUIRED:\s+/, "", $i);
             pk["required"] = $i;
@@ -145,7 +155,7 @@ function index_binary_package(repo, pk,   i, m, path) {
         path = sprintf("./%s/%s", pk["location"], db_get_tar_name(pk));
     }
     pk["checksum"] = repo["checksums"][path];
-    pk["repo_id"] = repo["name"];
+    pk["repo_id"] = repo["id"];
 }
 
 function index_slackbuild(repo, pk,    i, m) {
@@ -181,7 +191,7 @@ function index_slackbuild(repo, pk,    i, m) {
         }
     }
 
-    pk["repo_id"] = repo["name"];
+    pk["repo_id"] = repo["id"];
     match(pk["location"], /.*\/([^\/]*)\/[^\/]*/, m);
     pk["series"] = m[1];
     pk["type"] = "SlackBuild";
@@ -190,12 +200,10 @@ function index_slackbuild(repo, pk,    i, m) {
 function index_repo(repo, packages,    file, m) {
     FS = "\n"; RS = "";
     if (repo["type"] == "pk") {
-        file = sprintf("%s/repo_%s/PACKAGES.TXT", DIRS["lib"], repo["name"]);
+        file = sprintf("%s/PACKAGES.TXT", repo["dir"]);
     } else {
-        file = sprintf("%s/repo_%s/SLACKBUILDS.TXT", DIRS["lib"], repo["name"]);
+        file = sprintf("%s/SLACKBUILDS.TXT", repo["dir"]);
     }
-
-    printf "Indexing %s...\n", repo["name"];
 
     while ((getline < file) > 0) {
         if ($0 ~ /^PACKAGE\s+/) {
@@ -215,11 +223,13 @@ function index_repo(repo, packages,    file, m) {
     close(file);
 }
 
-function db_build(    i) {
+function db_build(    i, j) {
     for (i = REPOS["length"]; i >= 1; i--) {
         if (REPOS[i]["failed"]) {
             continue;
         }
+
+        printf "Indexing %s...\n", REPOS[i]["name"];
         index_repo(REPOS[i], packages);
     }
 }

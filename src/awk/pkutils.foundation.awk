@@ -94,28 +94,44 @@ function pk_parse_options(    file, line, m) {
     close(file);
 }
 
-function pk_parse_repos_list(    file, total) {
+function add_repo(type, name, id, uri, pv,    k) {
+    k = ++REPOS["length"];
+    REPOS[k]["pv"] = pv;
+    REPOS[k]["uri"] = uri;
+    REPOS[k]["id"] = id;
+    REPOS[k]["name"] = name;
+    REPOS[k]["type"] = type;
+
+    REPOS[k]["dir"] = sprintf("%s/repo_%s", DIRS["lib"], REPOS[k]["name"]);
+    REPOS[k]["cache"] = sprintf("%s/%s", DIRS["cache"], REPOS[k]["name"]);
+
+    system("mkdir -p " REPOS[k]["dir"]);
+    system("mkdir -p " REPOS[k]["cache"]);
+}
+
+function pk_parse_repos_list(    i, k, u, file, total) {
     FS = " "; RS = "\n";
     file = DIRS["etc"] "/repos.list";
 
     while ((getline < file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
-            total++;
-            REPOS[total]["uri"] = $3;
-            REPOS[total]["name"] = $2;
-            REPOS[total]["type"] = $1;
-
-            REPOS[total]["dir"] = sprintf("%s/repo_%s", DIRS["lib"], REPOS[total]["name"]);
-            REPOS[total]["cache"] = sprintf("%s/%s", DIRS["cache"], REPOS[total]["name"]);
-
-            system("mkdir -p " REPOS[total]["dir"]);
-            system("mkdir -p " REPOS[total]["cache"]);
+            # 3rd-party repositories
+            add_repo($1, $2, $2, $3, 0);
+        } else if ((NF >= 4) && $2 ~ /^slackware(64)?$/) {
+            # official repositories from PV
+            for (i = NF; i >= 4; i--) {
+                if ($i ~ /^slackware(64)?$/) {
+                    u = $3;
+                } else {
+                    u = sprintf("%s/%s", $3, $i);
+                }
+                add_repo($1, $i, $2, u, 1);
+            }
         }
     }
 
     close(file);
-    REPOS["length"] = total;
-    return total;
+    return REPOS["length"];
 }
 
 function parse_lock_list(    file) {

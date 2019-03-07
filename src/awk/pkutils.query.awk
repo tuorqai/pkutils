@@ -18,6 +18,11 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+# pkutils.query.awk
+# Functions to work with the internal database.
+# The entire database is kept in RAM for performance,
+# so pkutils is *HIGHLY* RAM-consuming.
+
 # --------------------------------
 # -- pk_get_package_id_by_name
 # Get package index in DB by it's name

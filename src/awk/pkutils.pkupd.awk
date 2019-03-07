@@ -53,7 +53,7 @@ function pkupd_read_checksums(repo,    file, entry) {
 
 function pkupd_sync_repo(repo,    index_txt, failed) {
     # quite dirty, but gotta somehow handle the official repo's layout
-    if (repo["name"] ~ /^(slackware(64)?|extra|pasture|patches|testing)$/) {
+    if (repo["name"] ~ /^(extra|pasture|patches|testing)$/) {
         repo["uri"] = repo["uri"] "/" repo["name"];
     }
 
@@ -139,7 +139,7 @@ function index_binary_package(repo, pk,   i, m, path) {
         }
     }
 
-    if (repo["name"] ~ /^(slackware(64)?|extra|pasture|patches|testing)$/) {
+    if (repo["name"] ~ /^(extra|pasture|patches|testing)$/) {
         path = sprintf("./%s/%s", pk["series"], db_get_tar_name(pk));
     } else {
         path = sprintf("./%s/%s", pk["location"], db_get_tar_name(pk));

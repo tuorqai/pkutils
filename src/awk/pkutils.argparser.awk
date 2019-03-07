@@ -18,6 +18,9 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+# pkutils.argparser.awk
+# Overengineered argument parser.
+
 # --------------------------------
 # -- usage
 # --------------------------------
@@ -76,6 +79,7 @@ function parse_arguments3(stray, flag,    i, j, k, t, a, s, f, p, v) {
                     printf "Unrecognized switch: -%s\n", a[j] >> "/dev/stderr";
                     return 0;
                 }
+                f = 0;
             }
         } else if (ARGV[i] ~ /^--?.+$/) {
             split(ARGV[i], a, /=/);
@@ -96,6 +100,7 @@ function parse_arguments3(stray, flag,    i, j, k, t, a, s, f, p, v) {
                 printf "Unrecognized option: %s\n", ARGV[i] >> "/dev/stderr";
                 return 0;
             }
+            f = 0;
         } else {
             if (flag) {
                 printf "Unrecognized argument: %s\n", ARGV[i] >> "/dev/stderr";

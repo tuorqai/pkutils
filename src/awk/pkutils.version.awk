@@ -18,6 +18,9 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+# pkutils.version.awk
+# Don't ask anything.
+
 function pkutils_version_get() {
     return "5.1.0";
 }

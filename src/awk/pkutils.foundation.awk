@@ -18,6 +18,9 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+# pkutils.foundation.awk
+# Don't exactly know the purpose of this module.
+
 function pk_setup_dirs(root) {
     if (!root && ENVIRON["ROOT"]) {
         root = ENVIRON["ROOT"];
@@ -276,12 +279,4 @@ function pk_answer(prompt, default_reply,    reply) {
         }
         return 0;
     }
-}
-
-function pk_get_full_version(pk) {
-    if (pk["type"] == "SlackBuild") {
-        return pk["version"];
-    }
-    return sprintf("%s-%s-%d%s",
-        pk["version"], pk["arch"], pk["build"], pk["tag"]);
 }

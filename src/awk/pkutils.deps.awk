@@ -18,12 +18,13 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+# pkutils.deps.awk
+# Simple recursive dependency solver.
+
 @include "pkutils.query.awk" # db_get_by_name()
 
 # --------------------------------
 # -- is_dependency_here
-# Obidno, chto seiceas eta functia
-# prosto legit bez dela.
 # --------------------------------
 function is_dependency_here(p, dlist,    i) {
     for (i = 1; i <= dlist["length"]; i++) {
@@ -72,7 +73,16 @@ function is_in_queue(dqueue, p,    k) {
 # Renamed this function since it's purpose
 # is slightly changed.
 # --------------------------------
-function add_to_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
+# * p -> package ID in the DB
+# * dlist -> a list of dependencies
+# * r -> shall we add a dependency twice or even more times
+# * dqueue -> existing queue of dependencies, do not set on the first call
+# --------------------------------
+function add_to_dependency_list(p, dlist, r,    dqueue, i, k, d, deps, total) {
+    if (!r && is_dependency_here(p, dlist)) {
+        return;
+    }
+
     dqueue_push(dqueue, p);
 
     total = split(DB[p]["required"], deps, /,/);
@@ -112,14 +122,8 @@ function add_to_dependency_list(p, dlist,    dqueue, i, k, d, deps, total) {
         }
 
         # i sleduet recursia...
-        add_to_dependency_list(d, dlist,    dqueue);
+        add_to_dependency_list(d, dlist, r,    dqueue);
     }
-
-    # TODO: vnimatelhnhy citatelh mog zametith, chto zavisimosti dobavleayutsea
-    # v spisoc bez proverchi, chto oni uge tam, to esth v sloghnhix sluceayax
-    # (naprimer, pandoc iz SBo) spisoc razbuxaet do nevidannhix masxhtabof.
-    # Neobxodimo cachim-to obrazom eto delo ispravith. Nayvnhie pophitchi
-    # provereath eto prosthim sposobom terpeat fiasco.
 
     k = ++dlist["length"];
     dlist[k] = p;

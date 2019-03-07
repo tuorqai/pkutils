@@ -44,7 +44,7 @@ function register_arguments() {
         "Increase the verbosity level.");
     register_argument("-", "--root", "arg_root",
         "Set other root directory.", 1);
-    
+
     register_argument("0", "--dump-db", "arg_dump_db",
         "Print out all contents of the database in human-readable format and exit.");
     register_argument("s", "--strong", "arg_strong",
@@ -185,7 +185,7 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
         }
 
         delete dlist;
-        add_to_dependency_list(p, dlist);
+        add_to_dependency_list(p, dlist, !OPTIONS["no_repeat"]);
         if (dlist["length"] <= 1) {
             printf "No dependencies or information is not available.\n\n";
             continue;
@@ -197,8 +197,6 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
                 stash[d] = 65535;
                 stash["size"]++;
                 fmt = sprintf("  %%%ds`- %%s (%%s, %%s)\n", dlist[j, "level"] * 2);
-            } else if (OPTIONS["no_repeat"]) {
-                continue;
             } else {
                 fmt = sprintf("  %%%ds`- (%%s (%%s, %%s))\n", dlist[j, "level"] * 2);
             }
@@ -206,8 +204,13 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
                 DB[d]["name"], DB[d]["repo_id"], db_get_signature(DB[d]);
         }
 
-        printf "  Total dependencies: %d/%d.\n\n",
-            stash["size"] - 1, dlist["length"] - 1;
+        printf "  Total dependencies: ";
+        if (OPTIONS["no_repeat"]) {
+            printf "%d.\n\n", stash["size"] - 1;
+        } else {
+            printf "%d/%d.\n\n",
+                stash["size"] - 1, dlist["length"] - 1;
+        }
         delete stash;
     }
 

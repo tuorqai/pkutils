@@ -29,7 +29,7 @@ function arg_assume_yes()   { set_option("always_reply", 1001); }
 function arg_upgrade()      { set_option("upgrade", 1); }
 function arg_reinstall()    { set_option("force", 1); }
 function arg_dry_run()      { set_option("dryrun", 1); }
-function arg_download()     { set_option("fetch", 1); }
+function arg_download()     { set_option("fetch_only", 1); }
 function arg_verbose()      { set_option("verbose", OPTIONS["verbose"] + 1); }
 function arg_version()      { set_option("usage", 2); }
 function arg_help()         { set_option("usage", 1); }

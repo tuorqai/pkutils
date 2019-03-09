@@ -21,6 +21,16 @@
 # pkutils.foundation.awk
 # Don't exactly know the purpose of this module.
 
+# ----------------------------------------------------------------
+# DIRS
+# ----------------------------------------------------------------
+
+# --------------------------------
+# -- pk_setup_dirs
+# Initialize the DIRS array.
+# If root is not set, it will be attempted
+# to set it from the ROOT environment variable.
+# --------------------------------
 function pk_setup_dirs(root) {
     if (!root && ENVIRON["ROOT"]) {
         root = ENVIRON["ROOT"];
@@ -38,6 +48,10 @@ function pk_setup_dirs(root) {
     }
 }
 
+# --------------------------------
+# -- pk_populate_dirs
+# Create crucial directories.
+# --------------------------------
 function pk_populate_dirs() {
     if (system("mkdir -p " DIRS["lib"]) != 0)
         return 0;
@@ -48,6 +62,10 @@ function pk_populate_dirs() {
     return 1;
 }
 
+# --------------------------------
+# -- pk_check_dirs
+# Check if the LIB and CACHE directories is there.
+# --------------------------------
 function pk_check_dirs() {
     if (system("ls -1 " DIRS["lib"] " 1>/dev/null 2>/dev/null") != 0)
         return 0;
@@ -58,6 +76,13 @@ function pk_check_dirs() {
     return 1;
 }
 
+# ----------------------------------------------------------------
+# OPTIONS
+# ----------------------------------------------------------------
+
+# --------------------------------
+# -- set_option
+# --------------------------------
 function set_option(key, value) {
     if (OPTIONS["verbose"] >= 2) {
         printf ("set_option(): %s -> %s\n", key, value);
@@ -65,6 +90,10 @@ function set_option(key, value) {
     OPTIONS[key] = value;
 }
 
+# --------------------------------
+# -- pk_parse_options
+# Parse `pkutils.conf' file
+# --------------------------------
 function pk_parse_options(    file, line, m) {
     FS = " "; RS = "\n";
     file = DIRS["etc"] "/pkutils.conf";
@@ -94,9 +123,15 @@ function pk_parse_options(    file, line, m) {
     close(file);
 }
 
-function add_repo(type, name, id, uri, pv,    k) {
+# ----------------------------------------------------------------
+# REPOS
+# ----------------------------------------------------------------
+
+# --------------------------------
+# -- add_repo
+# --------------------------------
+function add_repo(type, name, id, uri,    k) {
     k = ++REPOS["length"];
-    REPOS[k]["pv"] = pv;
     REPOS[k]["uri"] = uri;
     REPOS[k]["id"] = id;
     REPOS[k]["name"] = name;
@@ -109,6 +144,9 @@ function add_repo(type, name, id, uri, pv,    k) {
     system("mkdir -p " REPOS[k]["cache"]);
 }
 
+# --------------------------------
+# -- pk_parse_repos_list
+# --------------------------------
 function pk_parse_repos_list(    i, k, u, file, total) {
     FS = " "; RS = "\n";
     file = DIRS["etc"] "/repos.list";
@@ -116,7 +154,7 @@ function pk_parse_repos_list(    i, k, u, file, total) {
     while ((getline < file) > 0) {
         if ((NF == 3) && ($0 ~ /^(pk|sb)/)) {
             # 3rd-party repositories
-            add_repo($1, $2, $2, $3, 0);
+            add_repo($1, $2, $2, $3);
         } else if ((NF >= 4) && $2 ~ /^slackware(64)?$/) {
             # official repositories from PV
             for (i = NF; i >= 4; i--) {
@@ -125,7 +163,7 @@ function pk_parse_repos_list(    i, k, u, file, total) {
                 } else {
                     u = sprintf("%s/%s", $3, $i);
                 }
-                add_repo($1, $i, $2, u, 1);
+                add_repo($1, $i, $2, u);
             }
         }
     }
@@ -134,6 +172,13 @@ function pk_parse_repos_list(    i, k, u, file, total) {
     return REPOS["length"];
 }
 
+# ----------------------------------------------------------------
+# LOCK
+# ----------------------------------------------------------------
+
+# --------------------------------
+# -- parse_lock_list
+# --------------------------------
 function parse_lock_list(    file) {
     FS = " "; RS = "\n";
 
@@ -147,6 +192,10 @@ function parse_lock_list(    file) {
     }
     close(file);
 }
+
+# ----------------------------------------------------------------
+# FILE FETCHING FUNCTIONS
+# ----------------------------------------------------------------
 
 # --------------------------------
 # -- check_md5sum
@@ -260,10 +309,15 @@ function get_file(output, uri,    scheme, host, path, m) {
     return 1;
 }
 
-#
+# ----------------------------------------------------------------
+# USER PROMPT
+# ----------------------------------------------------------------
+
+# --------------------------------
+# -- pk_answer
 # -> 0: user replied N
 # -> 1: user replied Y
-#
+# --------------------------------
 function pk_answer(prompt, default_reply,    reply) {
     if (default_reply == "y") {
         printf "%s [Y/n] ", prompt;

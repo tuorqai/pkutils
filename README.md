@@ -41,6 +41,12 @@ I understand that AWK is not supposed to be used in the way I use it, but who ca
 1. I'm too lazy for it.
 2. Writing in English consumes about 101% of my brain's CPU. Speaking it consumes even more.
 
+## How can I remove packages?
+
+Do it with `removepkg` as always.
+Unfortunately, there is no "reverse dependency solver" and "auto v. manual"
+package marking at the time, so package removing tool would be useless.
+
 ## Should I be careful?
 
 Definitely. Always use `-x` key with `pkadd`.

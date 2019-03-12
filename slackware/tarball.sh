@@ -1,6 +1,6 @@
 #!/bin/sh
 
-VERSION=${VERSION:-6.0.1}
+VERSION=${VERSION:-7.0.0}
 
 set -e
 

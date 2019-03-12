@@ -22,9 +22,9 @@
 # Don't ask anything.
 
 function pkutils_version_get() {
-    return "5.1.0";
+    return "7.0.0";
 }
 
 function pkutils_version() {
-    printf "  pkutils 5.1.0\n\n";
+    printf "  pkutils 7.0.0\n\n";
 }

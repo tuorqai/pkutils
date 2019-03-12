@@ -85,7 +85,7 @@ function db_get_tar_name(pk) {
 # --------------------------------
 function db_rebuild(    m, cmd, index_dat, total) {
     index_dat = DIRS["lib"] "/index.dat";
-    FS = "\n"; RS = "\n--------------------------------\n";
+    FPAT = "[^,]*|\"[^\"]*\"";
     while ((getline < index_dat) > 0) {
         total++;
         DB[total]["repo_id"]     = $1;

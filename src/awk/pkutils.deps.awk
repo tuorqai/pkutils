@@ -85,7 +85,7 @@ function add_to_dependency_list(p, dlist, r,    dqueue, i, k, d, deps, total) {
 
     dqueue_push(dqueue, p);
 
-    total = split(DB[p]["required"], deps, /,/);
+    total = split(DB[p]["required"], deps, /\s+/);
     for (i = 1; i <= total; i++) {
         # ubrath vsiu informatiu o versiach, t.c. sil net eto poddergivath
         sub(/[<>=][A-Za-z0-9\.]$/, "", deps[i]);

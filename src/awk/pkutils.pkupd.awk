@@ -136,16 +136,19 @@ function index_binary_package(repo, pk,   i, m, path) {
             }
         } else if ($i ~ /^PACKAGE REQUIRED:\s+.*/) {
             sub(/PACKAGE REQUIRED:\s+/, "", $i);
+            gsub(/,/, " ", $i);
             pk["required"] = $i;
         } else if ($i ~ /^PACKAGE CONFLICTS:\s+.*/) {
             sub(/PACKAGE CONFLICTS:\s+/, "", $i);
+            gsub(/,/, " ", $i);
             pk["conflicts"] = $i;
         } else if ($i ~ /^PACKAGE SUGGESTS:\s+.*/) {
             sub(/PACKAGE SUGGESTS:\s+/, "", $i);
+            gsub(/,/, " ", $i);
             pk["suggests"] = $i;
         } else if ($i ~ "^" pk["name"] ": " pk["name"] " \\(.+\\)$") {
             match($i, "^" pk["name"] ": " pk["name"] " \\((.+)\\)$", m);
-            pk["description"] = m[1];
+            pk["description"] = "\"" m[1] "\"";
         }
     }
 
@@ -159,7 +162,7 @@ function index_binary_package(repo, pk,   i, m, path) {
 }
 
 function index_slackbuild(repo, pk,    i, m) {
-    for (i = 1; i < NF; i++) {
+    for (i = 1; i <= NF; i++) {
         if ($i ~ /^SLACKBUILD NAME:\s+/) {
             sub(/SLACKBUILD NAME:\s+/, "", $i);
             pk["name"] = $i;
@@ -183,11 +186,11 @@ function index_slackbuild(repo, pk,    i, m) {
             pk["src_checksum_x86_64"] = $i;
         } else if ($i ~ /^SLACKBUILD REQUIRES:\s+/) {
             sub(/SLACKBUILD REQUIRES:\s+/, "", $i);
-            gsub(/\s+/, ",", $i);
             pk["required"] = $i;
         } else if ($i ~ /^SLACKBUILD SHORT DESCRIPTION:\s+/) {
             sub(/SLACKBUILD SHORT DESCRIPTION:\s+/, "", $i);
-            pk["description"] = $i;
+            match($i, /\((.+)\)/, m);
+            pk["description"] = "\"" m[1] "\"";
         }
     }
 
@@ -238,7 +241,7 @@ function write_index_dat(    i, index_dat) {
     index_dat = DIRS["lib"] "/index.dat";
     printf "" > index_dat;
 
-    OFS = "\n"; ORS = "\n--------------------------------\n";
+    OFS = ","; ORS = "\n";
 
     for (i = 1; i <= DB["length"]; i++) {
         print   DB[i]["repo_id"],     \
@@ -299,7 +302,7 @@ function pkupd_main() {
         return 255;
     }
 
-    write_index_dat(packages, total_packages);
+    write_index_dat();
 }
 
 BEGIN {

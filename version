@@ -7,6 +7,6 @@ if [ -z "$NEW" ]; then
   exit 100
 fi
 
-sed -ri "s/[0-9]\.[0-9][a-z][0-9]+/$NEW/g" ./src/awk/pkutils.version.awk || exit 200
+sed -ri "s/[0-9]+\.[0-9]+\.[0-9]+/$NEW/g" ./src/awk/pkutils.version.awk || exit 200
 sed -ri "s/VERSION:-.*}/VERSION:-${NEW}}/g" ./slackware/pkutils.SlackBuild || exit 200
 sed -ri "s/VERSION:-.*}/VERSION:-${NEW}}/g" ./slackware/tarball.sh || exit 200

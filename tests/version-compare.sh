@@ -37,8 +37,8 @@ cat <<EOF > $TMP/test.awk
 @include "pkutils.version-compare.awk"
 
 BEGIN {
-    # compare if 1st version is newer than 2nd
-    if (compare_versions(ARGV[1], ARGV[2])) {
+    status = compare_versions(ARGV[1], ARGV[2]);
+    if (status >= 0) {
         print ARGV[1];
     } else {
         print ARGV[2];

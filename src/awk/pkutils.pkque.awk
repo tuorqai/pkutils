@@ -30,7 +30,6 @@ function arg_verbose()      { set_option("verbose", OPTIONS["verbose"] + 1); }
 function arg_root(v)        { set_option("root", v); }
 function arg_dump_db()      { set_option("dump_db", 1); }
 function arg_strong()       { set_option("strong", 1); }
-function arg_show_all()     { set_option("show_all", 1); }
 function arg_show_deps()    { set_option("show_deps", 1); }
 function arg_show_desc()    { set_option("show_desc", 1); }
 function arg_no_repeat_deps() { set_option("no_repeat", 1); }
@@ -49,8 +48,6 @@ function register_arguments() {
         "Print out all contents of the database in human-readable format and exit.");
     register_argument("s", "--strong", "arg_strong",
         "Enable strict search.");
-    register_argument("a", "--show-all", "arg_show_all",
-        "Include locally installed packages in the results.");
     register_argument("p", "--show-deps", "arg_show_deps",
         "Show dependency tree.");
     register_argument("n", "--no-repeat-deps", "arg_no_repeat_deps",
@@ -161,15 +158,31 @@ function pkque_main(    i, p, d, queries, results, dlist, fmt, j, stash) {
     for (i = 1; i <= results["length"]; i++) {
         p = results[i];
 
-        if (!OPTIONS["show_all"] && DB[p]["repo_id"] == "local") {
+        status = get_package_status(p);
+        if (DB[p]["repo_id"] == "local" && status != 65536) {
+            # not an orphan, so probably has been displayed or will be
             continue;
         }
 
-        printf "%s:%s/%s %s\n",
+        printf "%s:%s/%s %s",
             DB[p]["repo_id"],
             DB[p]["series"],
             DB[p]["name"],
             db_get_signature(DB[p]);
+
+        if (status == -1) {
+            printf " [downgrade]\n";
+        } else if (status == 0) {
+            printf " [installed]\n";
+        } else if (status == 1) {
+            printf " [upgrade]\n";
+        } else if (status == 32768) {
+            printf " [other tag]\n";
+        } else if (status == 65536) {
+            printf " [orphan]\n";
+        } else {
+            printf "\n";
+        }
 
         if (OPTIONS["show_desc"]) {
             if (!DB[p]["description"]) {

@@ -18,10 +18,101 @@
 # 3. This notice may not be removed or altered from any source distribution.
 #
 
+@include "pkutils.version-compare"
+
 # pkutils.query.awk
 # Functions to work with the internal database.
 # The entire database is kept in RAM for performance,
 # so pkutils is *HIGHLY* RAM-consuming.
+
+
+# --------------------------------
+# -- compare_packages
+#    -1: pk1 is older
+#     0: identical packages
+#     1: pk1 is newer
+# 32768: identical packages, but different tags
+# 65536: different packages
+# --------------------------------
+function compare_packages(pk1, pk2,    status) {
+    if (pk1["name"] != pk2["name"]) {
+        return 65536;
+    }
+    status = compare_versions(pk1["version"], pk2["version"]);
+    if (status != 0) {
+        return status;
+    }
+    if (pk1["build"] > pk2["build"]) {
+        return 1;
+    } else if (pk1["build"] < pk2["build"]) {
+        return -1;
+    }
+    if (pk1["tag"] != pk2["tag"]) {
+        return 32768;
+    }
+    return 0;
+}
+
+# --------------------------------
+# -- get_remote_package_status
+#   -1: downgrade is possible
+#    0: installed
+#    1: upgrade is possible
+#  32K: other tag
+# 128K: not installed
+# --------------------------------
+function get_remote_package_status(pk,    i, rc) {
+    for (i = DB["first_local"]; i <= DB["length"]; i++) {
+        rc = compare_packages(pk, DB[i]);
+        if (rc == 65536) {
+            # different package, skip
+            continue;
+        }
+        return rc;
+    }
+    return 131072;
+}
+
+# --------------------------------
+# -- get_local_package_status
+#     0: latest
+#     1: upgradable
+# 65536: orphan
+# --------------------------------
+function get_local_package_status(pk,    i, rc, status) {
+    # let's assume that the local package is orphan
+    status = 65536;
+    for (i = 1; i <= DB["last_remote"]; i++) {
+        rc = compare_packages(pk, DB[i]);
+        if (rc == 65536) {
+            # different package, skip
+            continue;
+        } else if (rc == -1) {
+            # local package is older
+            status = 1;
+        } else if (rc == 0 && status == 65536) {
+            # if there is no upgrade, then the latest version is here already
+            status = 0;
+        }
+    }
+    return status;
+}
+
+# --------------------------------
+# -- get_package_status
+#   -1: downgradable
+#    0: installed
+#    1: upgradable
+#  32K: other tag
+#  64K: orphan
+# 128K: not installed
+# --------------------------------
+function get_package_status(id,    i, total, rc, status) {
+    if (id <= DB["last_remote"]) {
+        return get_remote_package_status(DB[id]);
+    }
+    return get_local_package_status(DB[id]);
+}
 
 # --------------------------------
 # -- pk_get_package_id_by_name
